@@ -28,6 +28,17 @@ async def schedule_processes(request: CPUScheduleRequest):
                 context_switch_cost=request.config.context_switch_cost,
                 preemptive=request.config.preemptive
             )
+        elif request.algo == "RoundRobin":
+            if not request.config.time_quantum or request.config.time_quantum <= 0:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Time quantum must be specified and greater than 0 for Round Robin scheduling"
+                )
+            result = CPUSchedulerService.round_robin_scheduling(
+                processes=request.processes,
+                time_quantum=request.config.time_quantum,
+                context_switch_cost=request.config.context_switch_cost
+            )
         else:
             raise HTTPException(
                 status_code=400, 
@@ -58,11 +69,77 @@ async def get_supported_algorithms():
                 {"name": "FCFS", "description": "First Come First Serve", "implemented": True},
                 {"name": "SJF", "description": "Shortest Job First", "implemented": True},
                 {"name": "Priority", "description": "Priority Scheduling", "implemented": True},
-                {"name": "RoundRobin", "description": "Round Robin", "implemented": False},
+                {"name": "RoundRobin", "description": "Round Robin", "implemented": True},
                 {"name": "MLFQ", "description": "Multi-Level Feedback Queue", "implemented": False}
             ]
         }
     )
+
+@router.post("/test/round-robin/small-quantum")
+async def test_round_robin_small_quantum():
+    """
+    Test Round Robin algorithm with small time quantum (2 units)
+    """
+    dummy_data = CPUScheduleRequest(
+        algo="RoundRobin",
+        config={
+            "time_quantum": 2.0,
+            "context_switch_cost": 0.5,
+            "cores": 1
+        },
+        processes=[
+            {"pid": 1, "arrival_time": 0, "burst_time": 8, "priority": 0},
+            {"pid": 2, "arrival_time": 1, "burst_time": 4, "priority": 0},
+            {"pid": 3, "arrival_time": 2, "burst_time": 6, "priority": 0},
+            {"pid": 4, "arrival_time": 3, "burst_time": 3, "priority": 0}
+        ]
+    )
+    
+    return await schedule_processes(dummy_data)
+
+@router.post("/test/round-robin/medium-quantum")
+async def test_round_robin_medium_quantum():
+    """
+    Test Round Robin algorithm with medium time quantum (4 units)
+    """
+    dummy_data = CPUScheduleRequest(
+        algo="RoundRobin",
+        config={
+            "time_quantum": 4.0,
+            "context_switch_cost": 0.5,
+            "cores": 1
+        },
+        processes=[
+            {"pid": 1, "arrival_time": 0, "burst_time": 8, "priority": 0},
+            {"pid": 2, "arrival_time": 1, "burst_time": 4, "priority": 0},
+            {"pid": 3, "arrival_time": 2, "burst_time": 6, "priority": 0},
+            {"pid": 4, "arrival_time": 3, "burst_time": 3, "priority": 0}
+        ]
+    )
+    
+    return await schedule_processes(dummy_data)
+
+@router.post("/test/round-robin/large-quantum")
+async def test_round_robin_large_quantum():
+    """
+    Test Round Robin algorithm with large time quantum (10 units) - behaves like FCFS
+    """
+    dummy_data = CPUScheduleRequest(
+        algo="RoundRobin",
+        config={
+            "time_quantum": 10.0,
+            "context_switch_cost": 0.5,
+            "cores": 1
+        },
+        processes=[
+            {"pid": 1, "arrival_time": 0, "burst_time": 8, "priority": 0},
+            {"pid": 2, "arrival_time": 1, "burst_time": 4, "priority": 0},
+            {"pid": 3, "arrival_time": 2, "burst_time": 6, "priority": 0},
+            {"pid": 4, "arrival_time": 3, "burst_time": 3, "priority": 0}
+        ]
+    )
+    
+    return await schedule_processes(dummy_data)
 
 @router.post("/test/priority/non-preemptive")
 async def test_priority_non_preemptive():
