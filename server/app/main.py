@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
+from app.endpoints.cpu import router as cpu_router
 
 app = FastAPI(title="LearnOS Simulator", version="1.0.0")
 app.add_middleware(
@@ -10,6 +11,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(cpu_router)
 
 @app.get("/", response_class=HTMLResponse)
 async def root():

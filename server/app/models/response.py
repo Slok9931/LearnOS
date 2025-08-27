@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 class Event(BaseModel):
     time: float
@@ -26,3 +26,15 @@ class SimulationSummary(BaseModel):
 class SimulationResult(BaseModel):
     events: List[Event] = []
     summary: SimulationSummary
+
+class APIResponse(BaseModel):
+    success: bool
+    message: str
+    data: Optional[Any] = None
+    error: Optional[str] = None
+
+class ErrorResponse(BaseModel):
+    success: bool = False
+    message: str
+    error: str
+    data: Optional[Any] = None
