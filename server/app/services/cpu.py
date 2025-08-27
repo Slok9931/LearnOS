@@ -1,5 +1,5 @@
-from typing import List
-from app.models.cpu import Process, ProcessResult, CPUScheduleResponse
+from typing import List, Dict
+from app.models.cpu import Process, ProcessResult, CPUScheduleResponse, MLFQConfig
 
 class CPUSchedulerService:
     
@@ -237,6 +237,213 @@ class CPUSchedulerService:
         
         return CPUScheduleResponse(
             algorithm=f"Round Robin (TQ={time_quantum})",
+            total_processes=total_processes,
+            total_time=total_time,
+            avg_waiting_time=round(avg_waiting_time, 2),
+            avg_turnaround_time=round(avg_turnaround_time, 2),
+            avg_response_time=round(avg_response_time, 2),
+            cpu_utilization=round(cpu_utilization, 2),
+            throughput=round(throughput, 4),
+            processes=completed_processes,
+            gantt_chart=gantt_chart
+        )
+
+    @staticmethod
+    def mlfq_scheduling(processes: List[Process], mlfq_config: MLFQConfig, context_switch_cost: float = 0) -> CPUScheduleResponse:
+        """
+        Multi-Level Feedback Queue (MLFQ) Scheduling Algorithm
+        Features:
+        - Multiple priority queues with different time quantums
+        - Process aging to prevent starvation
+        - Priority boost mechanism
+        """
+        if not processes:
+            raise ValueError("No processes provided")
+        
+        if not mlfq_config:
+            raise ValueError("MLFQ configuration required")
+        
+        if len(mlfq_config.time_quantums) != mlfq_config.num_queues:
+            raise ValueError("Number of time quantums must match number of queues")
+        
+        class MLFQProcess:
+            def __init__(self, process: Process):
+                self.pid = process.pid
+                self.arrival_time = process.arrival_time
+                self.burst_time = process.burst_time
+                self.priority = process.priority
+                self.remaining_time = float(process.burst_time)
+                self.current_queue = 0
+                self.time_in_queue = 0
+                self.last_boost_time = 0
+                self.first_run = True
+        
+        working_processes = [MLFQProcess(p) for p in processes]
+        
+        queues = [[] for _ in range(mlfq_config.num_queues)]
+        completed_processes = []
+        gantt_chart = []
+        current_time = 0.0
+        process_start_times = {}
+        process_response_times = {}
+        last_boost_time = 0
+        
+        process_wait_start = {}
+        
+        max_time = sum(p.burst_time for p in processes) * 3 + max(p.arrival_time for p in processes)
+        
+        while current_time < max_time and len(completed_processes) < len(processes):
+            for wp in working_processes:
+                if (wp.arrival_time <= current_time and 
+                    wp.remaining_time > 0 and 
+                    wp not in [p for queue in queues for p in queue]):
+                    queues[0].append(wp)
+                    process_wait_start[wp.pid] = current_time
+            
+            if current_time - last_boost_time >= mlfq_config.boost_interval:
+                all_processes = []
+                for queue in queues:
+                    all_processes.extend(queue)
+                    queue.clear()
+                
+                for wp in all_processes:
+                    wp.current_queue = 0
+                    wp.time_in_queue = 0
+                    wp.last_boost_time = current_time
+                    queues[0].append(wp)
+                
+                last_boost_time = current_time
+                
+                if all_processes:
+                    gantt_chart.append({
+                        "process": "PRIORITY_BOOST",
+                        "start": current_time,
+                        "end": current_time + 0.1
+                    })
+                    current_time += 0.1
+            
+            for queue_idx in range(1, mlfq_config.num_queues):
+                for wp in queues[queue_idx][:]:
+                    if (wp.pid in process_wait_start and 
+                        current_time - process_wait_start[wp.pid] >= mlfq_config.aging_threshold):
+                        queues[queue_idx].remove(wp)
+                        wp.current_queue = max(0, queue_idx - 1)
+                        wp.time_in_queue = 0
+                        queues[wp.current_queue].append(wp)
+                        process_wait_start[wp.pid] = current_time
+            
+            current_process = None
+            current_queue_idx = -1
+            
+            for queue_idx in range(mlfq_config.num_queues):
+                if queues[queue_idx]:
+                    current_process = queues[queue_idx].pop(0)
+                    current_queue_idx = queue_idx
+                    break
+            
+            if not current_process:
+                next_arrivals = [wp.arrival_time for wp in working_processes 
+                               if wp.arrival_time > current_time and wp.remaining_time > 0]
+                if not next_arrivals:
+                    break
+                
+                next_time = min(next_arrivals)
+                if current_time < next_time:
+                    gantt_chart.append({
+                        "process": "IDLE",
+                        "start": current_time,
+                        "end": next_time
+                    })
+                current_time = next_time
+                continue
+            
+            if gantt_chart and context_switch_cost > 0:
+                last_entry = gantt_chart[-1]
+                if (last_entry["process"] not in ["IDLE", "CONTEXT_SWITCH", "PRIORITY_BOOST"] and 
+                    last_entry["process"] != f"P{current_process.pid}"):
+                    gantt_chart.append({
+                        "process": "CONTEXT_SWITCH",
+                        "start": current_time,
+                        "end": current_time + context_switch_cost
+                    })
+                    current_time += context_switch_cost
+            
+            if current_process.first_run:
+                process_response_times[current_process.pid] = current_time - current_process.arrival_time
+                process_start_times[current_process.pid] = current_time
+                current_process.first_run = False
+            
+            time_quantum = mlfq_config.time_quantums[current_queue_idx]
+            execution_time = min(time_quantum, current_process.remaining_time)
+            
+            if current_queue_idx == mlfq_config.num_queues - 1:
+                execution_time = current_process.remaining_time
+            
+            gantt_chart.append({
+                "process": f"P{current_process.pid}",
+                "start": current_time,
+                "end": current_time + execution_time,
+                "queue": current_queue_idx,
+                "quantum_used": execution_time
+            })
+            
+            current_process.remaining_time -= execution_time
+            current_process.time_in_queue += execution_time
+            current_time += execution_time
+            
+            for wp in working_processes:
+                if (wp.arrival_time <= current_time and 
+                    wp.remaining_time > 0 and 
+                    wp not in [p for queue in queues for p in queue] and
+                    wp != current_process):
+                    queues[0].append(wp)
+                    process_wait_start[wp.pid] = current_time
+            
+            if current_process.remaining_time <= 0:
+                completion_time = current_time
+                turnaround_time = completion_time - current_process.arrival_time
+                waiting_time = turnaround_time - current_process.burst_time
+                response_time = process_response_times[current_process.pid]
+                
+                result = ProcessResult(
+                    pid=current_process.pid,
+                    arrival_time=current_process.arrival_time,
+                    burst_time=current_process.burst_time,
+                    start_time=process_start_times[current_process.pid],
+                    completion_time=completion_time,
+                    turnaround_time=turnaround_time,
+                    waiting_time=waiting_time,
+                    response_time=response_time
+                )
+                completed_processes.append(result)
+                
+                if current_process.pid in process_wait_start:
+                    del process_wait_start[current_process.pid]
+            else:
+                if (current_queue_idx < mlfq_config.num_queues - 1 and 
+                    current_process.time_in_queue >= mlfq_config.time_quantums[current_queue_idx]):
+                    current_process.current_queue = current_queue_idx + 1
+                    current_process.time_in_queue = 0
+                    queues[current_process.current_queue].append(current_process)
+                else:
+                    queues[current_queue_idx].append(current_process)
+                
+                process_wait_start[current_process.pid] = current_time
+        
+        completed_processes.sort(key=lambda x: x.pid)
+        
+        total_processes = len(completed_processes)
+        avg_waiting_time = sum(r.waiting_time for r in completed_processes) / total_processes
+        avg_turnaround_time = sum(r.turnaround_time for r in completed_processes) / total_processes
+        avg_response_time = sum(r.response_time for r in completed_processes) / total_processes
+        
+        total_time = max(r.completion_time for r in completed_processes)
+        total_burst_time = sum(p.burst_time for p in processes)
+        cpu_utilization = (total_burst_time / total_time) * 100 if total_time > 0 else 0
+        throughput = total_processes / total_time if total_time > 0 else 0
+        
+        return CPUScheduleResponse(
+            algorithm=f"MLFQ ({mlfq_config.num_queues} queues, TQ={mlfq_config.time_quantums})",
             total_processes=total_processes,
             total_time=total_time,
             avg_waiting_time=round(avg_waiting_time, 2),
