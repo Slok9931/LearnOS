@@ -22,6 +22,12 @@ async def schedule_processes(request: CPUScheduleRequest):
                 context_switch_cost=request.config.context_switch_cost,
                 preemptive=request.config.preemptive
             )
+        elif request.algo == "Priority":
+            result = CPUSchedulerService.priority_scheduling(
+                processes=request.processes,
+                context_switch_cost=request.config.context_switch_cost,
+                preemptive=request.config.preemptive
+            )
         else:
             raise HTTPException(
                 status_code=400, 
@@ -51,12 +57,60 @@ async def get_supported_algorithms():
             "algorithms": [
                 {"name": "FCFS", "description": "First Come First Serve", "implemented": True},
                 {"name": "SJF", "description": "Shortest Job First", "implemented": True},
-                {"name": "Priority", "description": "Priority Scheduling", "implemented": False},
+                {"name": "Priority", "description": "Priority Scheduling", "implemented": True},
                 {"name": "RoundRobin", "description": "Round Robin", "implemented": False},
                 {"name": "MLFQ", "description": "Multi-Level Feedback Queue", "implemented": False}
             ]
         }
     )
+
+@router.post("/test/priority/non-preemptive")
+async def test_priority_non_preemptive():
+    """
+    Test Non-Preemptive Priority algorithm with dummy data
+    Lower priority number = Higher priority (0 is highest)
+    """
+    dummy_data = CPUScheduleRequest(
+        algo="Priority",
+        config={
+            "context_switch_cost": 0.5,
+            "cores": 1,
+            "preemptive": False
+        },
+        processes=[
+            {"pid": 1, "arrival_time": 0, "burst_time": 8, "priority": 3},
+            {"pid": 2, "arrival_time": 1, "burst_time": 4, "priority": 1},
+            {"pid": 3, "arrival_time": 2, "burst_time": 2, "priority": 0},
+            {"pid": 4, "arrival_time": 3, "burst_time": 1, "priority": 2},
+            {"pid": 5, "arrival_time": 4, "burst_time": 3, "priority": 1}
+        ]
+    )
+    
+    return await schedule_processes(dummy_data)
+
+@router.post("/test/priority/preemptive")
+async def test_priority_preemptive():
+    """
+    Test Preemptive Priority algorithm with dummy data
+    Lower priority number = Higher priority (0 is highest)
+    """
+    dummy_data = CPUScheduleRequest(
+        algo="Priority",
+        config={
+            "context_switch_cost": 0.5,
+            "cores": 1,
+            "preemptive": True
+        },
+        processes=[
+            {"pid": 1, "arrival_time": 0, "burst_time": 8, "priority": 3},
+            {"pid": 2, "arrival_time": 1, "burst_time": 4, "priority": 1},
+            {"pid": 3, "arrival_time": 2, "burst_time": 2, "priority": 0},
+            {"pid": 4, "arrival_time": 3, "burst_time": 1, "priority": 2},
+            {"pid": 5, "arrival_time": 4, "burst_time": 3, "priority": 1}
+        ]
+    )
+    
+    return await schedule_processes(dummy_data)
 
 @router.post("/test/sjf/non-preemptive")
 async def test_sjf_non_preemptive():
