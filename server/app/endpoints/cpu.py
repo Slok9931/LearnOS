@@ -1,9 +1,23 @@
 from fastapi import APIRouter, HTTPException
-from app.models.cpu import CPUScheduleRequest, MLFQConfig
+from app.models.cpu import CPUScheduleRequest, MLFQConfig, Process
 from app.models.response import APIResponse
 from app.services.cpu import CPUSchedulerService
 
 router = APIRouter(prefix="/api/cpu", tags=["CPU Scheduling"])
+
+def convert_request_to_process_objects(request_data: dict):
+    """Convert frontend request data to backend Process objects"""
+    processes = []
+    for process_data in request_data.get('processes', []):
+        # Create Process object from dictionary
+        process = Process(
+            pid=process_data.get('id', process_data.get('pid', 1)),
+            arrival_time=process_data.get('arrival_time', 0),
+            burst_time=process_data.get('burst_time', 1),
+            priority=process_data.get('priority', 0)
+        )
+        processes.append(process)
+    return processes
 
 @router.post("/schedule", response_model=APIResponse)
 async def schedule_processes(request: CPUScheduleRequest):
@@ -65,6 +79,185 @@ async def schedule_processes(request: CPUScheduleRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
+@router.post("/fcfs", response_model=APIResponse)
+async def fcfs_scheduling(request: dict):
+    """
+    FCFS (First Come First Serve) Scheduling Algorithm
+    """
+    try:
+        print(f"FCFS Request received: {request}")
+        
+        # Convert frontend format to backend Process objects
+        processes = convert_request_to_process_objects(request)
+        print(f"FCFS Converted processes: {[{'pid': p.pid, 'arrival_time': p.arrival_time, 'burst_time': p.burst_time, 'priority': p.priority} for p in processes]}")
+        
+        result = CPUSchedulerService.fcfs_scheduling(
+            processes=processes,
+            context_switch_cost=request.get('context_switch_cost', 0.5)
+        )
+        
+        return APIResponse(
+            success=True,
+            message="FCFS scheduling completed successfully",
+            data=result
+        )
+    
+    except ValueError as e:
+        print(f"FCFS ValueError: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        print(f"FCFS Exception: {str(e)}")  # Debug log
+        import traceback
+        print(f"FCFS Traceback: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+@router.post("/sjf", response_model=APIResponse)
+async def sjf_scheduling(request: dict):
+    """
+    SJF (Shortest Job First) Scheduling Algorithm
+    """
+    try:
+        print(f"SJF Request received: {request}")
+        
+        # Convert frontend format to backend Process objects
+        processes = convert_request_to_process_objects(request)
+        print(f"SJF Converted processes: {[{'pid': p.pid, 'arrival_time': p.arrival_time, 'burst_time': p.burst_time, 'priority': p.priority} for p in processes]}")
+        
+        result = CPUSchedulerService.sjf_scheduling(
+            processes=processes,
+            context_switch_cost=request.get('context_switch_cost', 0.5),
+            preemptive=request.get('preemptive', False)
+        )
+        
+        return APIResponse(
+            success=True,
+            message="SJF scheduling completed successfully",
+            data=result
+        )
+    
+    except ValueError as e:
+        print(f"SJF ValueError: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        print(f"SJF Exception: {str(e)}")  # Debug log
+        import traceback
+        print(f"SJF Traceback: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+@router.post("/priority", response_model=APIResponse)
+async def priority_scheduling(request: dict):
+    """
+    Priority Scheduling Algorithm
+    """
+    try:
+        print(f"Priority Request received: {request}")
+        
+        # Convert frontend format to backend Process objects
+        processes = convert_request_to_process_objects(request)
+        print(f"Priority Converted processes: {[{'pid': p.pid, 'arrival_time': p.arrival_time, 'burst_time': p.burst_time, 'priority': p.priority} for p in processes]}")
+        
+        result = CPUSchedulerService.priority_scheduling(
+            processes=processes,
+            context_switch_cost=request.get('context_switch_cost', 0.5),
+            preemptive=request.get('preemptive', False)
+        )
+        
+        return APIResponse(
+            success=True,
+            message="Priority scheduling completed successfully",
+            data=result
+        )
+    
+    except ValueError as e:
+        print(f"Priority ValueError: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        print(f"Priority Exception: {str(e)}")  # Debug log
+        import traceback
+        print(f"Priority Traceback: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+@router.post("/round-robin", response_model=APIResponse)
+async def round_robin_scheduling(request: dict):
+    """
+    Round Robin Scheduling Algorithm
+    """
+    try:
+        print(f"Round Robin Request received: {request}")
+        
+        time_quantum = request.get('time_quantum')
+        if not time_quantum or time_quantum <= 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Time quantum must be specified and greater than 0 for Round Robin scheduling"
+            )
+        
+        # Convert frontend format to backend Process objects
+        processes = convert_request_to_process_objects(request)
+        print(f"Round Robin Converted processes: {[{'pid': p.pid, 'arrival_time': p.arrival_time, 'burst_time': p.burst_time, 'priority': p.priority} for p in processes]}")
+        
+        result = CPUSchedulerService.round_robin_scheduling(
+            processes=processes,
+            time_quantum=time_quantum,
+            context_switch_cost=request.get('context_switch_cost', 0.5)
+        )
+        
+        return APIResponse(
+            success=True,
+            message="Round Robin scheduling completed successfully",
+            data=result
+        )
+    
+    except ValueError as e:
+        print(f"Round Robin ValueError: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        print(f"Round Robin Exception: {str(e)}")  # Debug log
+        import traceback
+        print(f"Round Robin Traceback: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+@router.post("/mlfq", response_model=APIResponse)
+async def mlfq_scheduling(request: dict):
+    """
+    MLFQ (Multi-Level Feedback Queue) Scheduling Algorithm
+    """
+    try:
+        print(f"MLFQ Request received: {request}")
+        
+        # Convert frontend format to backend Process objects
+        processes = convert_request_to_process_objects(request)
+        print(f"MLFQ Converted processes: {[{'pid': p.pid, 'arrival_time': p.arrival_time, 'burst_time': p.burst_time, 'priority': p.priority} for p in processes]}")
+        
+        mlfq_config_data = request.get('mlfq_config', {})
+        mlfq_config = MLFQConfig(
+            num_queues=mlfq_config_data.get('num_queues', 3),
+            time_quantums=mlfq_config_data.get('time_quantums', [2.0, 4.0, 8.0]),
+            aging_threshold=mlfq_config_data.get('aging_threshold', 10),
+            boost_interval=mlfq_config_data.get('boost_interval', 100)
+        )
+        
+        result = CPUSchedulerService.mlfq_scheduling(
+            processes=processes,
+            mlfq_config=mlfq_config,
+            context_switch_cost=request.get('context_switch_cost', 0.5)
+        )
+        
+        return APIResponse(
+            success=True,
+            message="MLFQ scheduling completed successfully",
+            data=result
+        )
+    
+    except ValueError as e:
+        print(f"MLFQ ValueError: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        print(f"MLFQ Exception: {str(e)}")  # Debug log
+        import traceback
+        print(f"MLFQ Traceback: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
 @router.get("/algorithms")
 async def get_supported_algorithms():
     """
@@ -83,271 +276,3 @@ async def get_supported_algorithms():
             ]
         }
     )
-
-@router.post("/test/mlfq/default")
-async def test_mlfq_default():
-    """
-    Test MLFQ algorithm with default configuration
-    3 queues with time quantums [2, 4, 8]
-    """
-    dummy_data = CPUScheduleRequest(
-        algo="MLFQ",
-        config={
-            "context_switch_cost": 0.5,
-            "cores": 1,
-            "mlfq_config": {
-                "num_queues": 3,
-                "time_quantums": [2.0, 4.0, 8.0],
-                "aging_threshold": 10,
-                "boost_interval": 100
-            }
-        },
-        processes=[
-            {"pid": 1, "arrival_time": 0, "burst_time": 15, "priority": 0},  # Long CPU-bound
-            {"pid": 2, "arrival_time": 2, "burst_time": 3, "priority": 0},   # Short I/O-bound
-            {"pid": 3, "arrival_time": 4, "burst_time": 8, "priority": 0},   # Medium
-            {"pid": 4, "arrival_time": 6, "burst_time": 2, "priority": 0},   # Short I/O-bound
-            {"pid": 5, "arrival_time": 8, "burst_time": 12, "priority": 0}   # Long CPU-bound
-        ]
-    )
-    
-    return await schedule_processes(dummy_data)
-
-@router.post("/test/mlfq/fast-aging")
-async def test_mlfq_fast_aging():
-    """
-    Test MLFQ algorithm with fast aging to prevent starvation
-    """
-    dummy_data = CPUScheduleRequest(
-        algo="MLFQ",
-        config={
-            "context_switch_cost": 0.5,
-            "cores": 1,
-            "mlfq_config": {
-                "num_queues": 4,
-                "time_quantums": [1.0, 2.0, 4.0, 8.0],
-                "aging_threshold": 5,  # Fast aging
-                "boost_interval": 50   # Frequent boost
-            }
-        },
-        processes=[
-            {"pid": 1, "arrival_time": 0, "burst_time": 20, "priority": 0},
-            {"pid": 2, "arrival_time": 1, "burst_time": 3, "priority": 0},
-            {"pid": 3, "arrival_time": 2, "burst_time": 6, "priority": 0},
-            {"pid": 4, "arrival_time": 3, "burst_time": 2, "priority": 0},
-            {"pid": 5, "arrival_time": 4, "burst_time": 10, "priority": 0}
-        ]
-    )
-    
-    return await schedule_processes(dummy_data)
-
-@router.post("/test/mlfq/interactive-workload")
-async def test_mlfq_interactive_workload():
-    """
-    Test MLFQ with mixed interactive and CPU-bound workload
-    """
-    dummy_data = CPUScheduleRequest(
-        algo="MLFQ",
-        config={
-            "context_switch_cost": 0.3,
-            "cores": 1,
-            "mlfq_config": {
-                "num_queues": 3,
-                "time_quantums": [1.5, 3.0, 6.0],
-                "aging_threshold": 8,
-                "boost_interval": 60
-            }
-        },
-        processes=[
-            {"pid": 1, "arrival_time": 0, "burst_time": 25, "priority": 0},  # CPU-bound
-            {"pid": 2, "arrival_time": 1, "burst_time": 1, "priority": 0},   # Interactive
-            {"pid": 3, "arrival_time": 3, "burst_time": 2, "priority": 0},   # Interactive
-            {"pid": 4, "arrival_time": 5, "burst_time": 18, "priority": 0},  # CPU-bound
-            {"pid": 5, "arrival_time": 7, "burst_time": 1, "priority": 0},   # Interactive
-            {"pid": 6, "arrival_time": 9, "burst_time": 3, "priority": 0},   # Interactive
-            {"pid": 7, "arrival_time": 11, "burst_time": 15, "priority": 0}  # CPU-bound
-        ]
-    )
-    
-    return await schedule_processes(dummy_data)
-
-@router.post("/test/round-robin/small-quantum")
-async def test_round_robin_small_quantum():
-    """
-    Test Round Robin algorithm with small time quantum (2 units)
-    """
-    dummy_data = CPUScheduleRequest(
-        algo="RoundRobin",
-        config={
-            "time_quantum": 2.0,
-            "context_switch_cost": 0.5,
-            "cores": 1
-        },
-        processes=[
-            {"pid": 1, "arrival_time": 0, "burst_time": 8, "priority": 0},
-            {"pid": 2, "arrival_time": 1, "burst_time": 4, "priority": 0},
-            {"pid": 3, "arrival_time": 2, "burst_time": 6, "priority": 0},
-            {"pid": 4, "arrival_time": 3, "burst_time": 3, "priority": 0}
-        ]
-    )
-    
-    return await schedule_processes(dummy_data)
-
-@router.post("/test/round-robin/medium-quantum")
-async def test_round_robin_medium_quantum():
-    """
-    Test Round Robin algorithm with medium time quantum (4 units)
-    """
-    dummy_data = CPUScheduleRequest(
-        algo="RoundRobin",
-        config={
-            "time_quantum": 4.0,
-            "context_switch_cost": 0.5,
-            "cores": 1
-        },
-        processes=[
-            {"pid": 1, "arrival_time": 0, "burst_time": 8, "priority": 0},
-            {"pid": 2, "arrival_time": 1, "burst_time": 4, "priority": 0},
-            {"pid": 3, "arrival_time": 2, "burst_time": 6, "priority": 0},
-            {"pid": 4, "arrival_time": 3, "burst_time": 3, "priority": 0}
-        ]
-    )
-    
-    return await schedule_processes(dummy_data)
-
-@router.post("/test/round-robin/large-quantum")
-async def test_round_robin_large_quantum():
-    """
-    Test Round Robin algorithm with large time quantum (10 units) - behaves like FCFS
-    """
-    dummy_data = CPUScheduleRequest(
-        algo="RoundRobin",
-        config={
-            "time_quantum": 10.0,
-            "context_switch_cost": 0.5,
-            "cores": 1
-        },
-        processes=[
-            {"pid": 1, "arrival_time": 0, "burst_time": 8, "priority": 0},
-            {"pid": 2, "arrival_time": 1, "burst_time": 4, "priority": 0},
-            {"pid": 3, "arrival_time": 2, "burst_time": 6, "priority": 0},
-            {"pid": 4, "arrival_time": 3, "burst_time": 3, "priority": 0}
-        ]
-    )
-    
-    return await schedule_processes(dummy_data)
-
-@router.post("/test/priority/non-preemptive")
-async def test_priority_non_preemptive():
-    """
-    Test Non-Preemptive Priority algorithm with dummy data
-    Lower priority number = Higher priority (0 is highest)
-    """
-    dummy_data = CPUScheduleRequest(
-        algo="Priority",
-        config={
-            "context_switch_cost": 0.5,
-            "cores": 1,
-            "preemptive": False
-        },
-        processes=[
-            {"pid": 1, "arrival_time": 0, "burst_time": 8, "priority": 3},
-            {"pid": 2, "arrival_time": 1, "burst_time": 4, "priority": 1},
-            {"pid": 3, "arrival_time": 2, "burst_time": 2, "priority": 0},
-            {"pid": 4, "arrival_time": 3, "burst_time": 1, "priority": 2},
-            {"pid": 5, "arrival_time": 4, "burst_time": 3, "priority": 1}
-        ]
-    )
-    
-    return await schedule_processes(dummy_data)
-
-@router.post("/test/priority/preemptive")
-async def test_priority_preemptive():
-    """
-    Test Preemptive Priority algorithm with dummy data
-    Lower priority number = Higher priority (0 is highest)
-    """
-    dummy_data = CPUScheduleRequest(
-        algo="Priority",
-        config={
-            "context_switch_cost": 0.5,
-            "cores": 1,
-            "preemptive": True
-        },
-        processes=[
-            {"pid": 1, "arrival_time": 0, "burst_time": 8, "priority": 3},
-            {"pid": 2, "arrival_time": 1, "burst_time": 4, "priority": 1},
-            {"pid": 3, "arrival_time": 2, "burst_time": 2, "priority": 0},
-            {"pid": 4, "arrival_time": 3, "burst_time": 1, "priority": 2},
-            {"pid": 5, "arrival_time": 4, "burst_time": 3, "priority": 1}
-        ]
-    )
-    
-    return await schedule_processes(dummy_data)
-
-@router.post("/test/sjf/non-preemptive")
-async def test_sjf_non_preemptive():
-    """
-    Test Non-Preemptive SJF algorithm with dummy data
-    """
-    dummy_data = CPUScheduleRequest(
-        algo="SJF",
-        config={
-            "context_switch_cost": 0.5,
-            "cores": 1,
-            "preemptive": False
-        },
-        processes=[
-            {"pid": 1, "arrival_time": 0, "burst_time": 8, "priority": 0},
-            {"pid": 2, "arrival_time": 1, "burst_time": 4, "priority": 0},
-            {"pid": 3, "arrival_time": 2, "burst_time": 2, "priority": 0},
-            {"pid": 4, "arrival_time": 3, "burst_time": 1, "priority": 0},
-            {"pid": 5, "arrival_time": 4, "burst_time": 3, "priority": 0}
-        ]
-    )
-    
-    return await schedule_processes(dummy_data)
-
-@router.post("/test/sjf/preemptive")
-async def test_sjf_preemptive():
-    """
-    Test Preemptive SJF (SRTF) algorithm with dummy data
-    """
-    dummy_data = CPUScheduleRequest(
-        algo="SJF",
-        config={
-            "context_switch_cost": 0.5,
-            "cores": 1,
-            "preemptive": True
-        },
-        processes=[
-            {"pid": 1, "arrival_time": 0, "burst_time": 8, "priority": 0},
-            {"pid": 2, "arrival_time": 1, "burst_time": 4, "priority": 0},
-            {"pid": 3, "arrival_time": 2, "burst_time": 2, "priority": 0},
-            {"pid": 4, "arrival_time": 3, "burst_time": 1, "priority": 0},
-            {"pid": 5, "arrival_time": 4, "burst_time": 3, "priority": 0}
-        ]
-    )
-    
-    return await schedule_processes(dummy_data)
-
-@router.post("/test/fcfs")
-async def test_fcfs():
-    """
-    Test FCFS algorithm with dummy data
-    """
-    dummy_data = CPUScheduleRequest(
-        algo="FCFS",
-        config={
-            "context_switch_cost": 1.0,
-            "cores": 1
-        },
-        processes=[
-            {"pid": 1, "arrival_time": 0, "burst_time": 8, "priority": 0},
-            {"pid": 2, "arrival_time": 1, "burst_time": 4, "priority": 0},
-            {"pid": 3, "arrival_time": 2, "burst_time": 9, "priority": 0},
-            {"pid": 4, "arrival_time": 3, "burst_time": 5, "priority": 0}
-        ]
-    )
-    
-    return await schedule_processes(dummy_data)
