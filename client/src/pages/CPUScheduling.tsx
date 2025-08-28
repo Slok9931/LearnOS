@@ -21,10 +21,12 @@ import {
   ChevronDown,
   Copy,
   Shuffle,
-  Info
+  Info,
+  BookOpen
 } from 'lucide-react'
 import { GanttChart } from '@/components/charts/GanttChart'
 import { MetricsChart } from '@/components/charts/MetricsChart'
+import ExplanationPanel from '@/components/charts/ExplanationPanel'
 import schedulingApi, { handleApiError } from '@/services/api'
 import { Process, SchedulingRequest, SchedulingResult } from '@/types/scheduling'
 
@@ -71,7 +73,8 @@ export default function CPUScheduling() {
   const [serverStatus, setServerStatus] = useState<'checking' | 'healthy' | 'unhealthy'>('checking')
   const [error, setError] = useState<string | null>(null)
   const [processListExpanded, setProcessListExpanded] = useState(true)
-  const [advancedConfigExpanded, setAdvancedConfigExpanded] = useState(true)
+  const [advancedConfigExpanded, setAdvancedConfigExpanded] = useState(false)
+  const [showExplanation, setShowExplanation] = useState(true)
 
   // Check server health on component mount
   useEffect(() => {
@@ -302,7 +305,7 @@ export default function CPUScheduling() {
               CPU Scheduling Simulator
             </h1>
             <p className="text-muted-foreground text-sm sm:text-base max-w-2xl mx-auto">
-              Simulate and visualize different CPU scheduling algorithms with comprehensive configuration options
+              Simulate and visualize different CPU scheduling algorithms with step-by-step explanations
             </p>
           </div>
 
@@ -367,7 +370,7 @@ export default function CPUScheduling() {
                   <Settings className="h-5 w-5 text-primary" />
                   <div>
                     <CardTitle className="text-foreground">Process Configuration</CardTitle>
-                    <CardDescription>Set up processes and their properties</CardDescription>
+                    <CardDescription className='ml-3'>Set up processes and their properties</CardDescription>
                   </div>
                 </div>
                 <Button
@@ -500,7 +503,7 @@ export default function CPUScheduling() {
                   <Clock className="h-5 w-5 text-primary" />
                   <div>
                     <CardTitle className="text-foreground">Algorithm Configuration</CardTitle>
-                    <CardDescription>Configure algorithm-specific parameters</CardDescription>
+                    <CardDescription className='ml-3'>Configure algorithm-specific parameters</CardDescription>
                   </div>
                 </div>
                 <Button
@@ -865,11 +868,26 @@ export default function CPUScheduling() {
           {/* Results Section */}
           {results && results.success && results.data && (
             <div className="space-y-6 animate-fadeIn">
-              <div className="flex items-center gap-3">
-                <BarChart3 className="h-5 w-5 text-primary" />
-                <h2 className="text-xl font-semibold text-foreground">
-                  {activeAlgorithm.toUpperCase().replace('-', ' ')} Results
-                </h2>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <BarChart3 className="h-5 w-5 text-primary" />
+                  <h2 className="text-xl font-semibold text-foreground">
+                    {activeAlgorithm.toUpperCase().replace('-', ' ')} Results
+                  </h2>
+                </div>
+                
+                {/* Toggle Explanation */}
+                <div className="flex items-center gap-2">
+                  <BookOpen className="h-4 w-4 text-muted-foreground" />
+                  <Switch
+                    id="show-explanation"
+                    checked={showExplanation}
+                    onCheckedChange={setShowExplanation}
+                  />
+                  <Label htmlFor="show-explanation" className="text-sm">
+                    Step-by-step explanation
+                  </Label>
+                </div>
               </div>
 
               {/* Gantt Chart */}
@@ -884,6 +902,25 @@ export default function CPUScheduling() {
                 metrics={results.data.metrics}
                 title="Performance Analysis"
               />
+
+              {/* Explanation Panel */}
+              {showExplanation && (
+                <ExplanationPanel
+                  results={results}
+                  algorithm={activeAlgorithm}
+                  processes={processes}
+                  algorithmConfig={{
+                    timeQuantum,
+                    contextSwitchCost,
+                    preemptive,
+                    mlfqConfig,
+                    rrVariation,
+                    processWeights,
+                    priorityType,
+                    priorityInversion
+                  }}
+                />
+              )}
             </div>
           )}
 
@@ -895,12 +932,13 @@ export default function CPUScheduling() {
                 <h3 className="text-lg font-medium text-foreground mb-2">Ready to Simulate</h3>
                 <p className="text-muted-foreground mb-4 max-w-md">
                   Configure your processes and algorithm parameters above, then run the simulation. 
-                  The Gantt chart and performance metrics will appear here.
+                  The Gantt chart, performance metrics, and step-by-step explanation will appear here.
                 </p>
                 <div className="flex flex-wrap gap-2 justify-center">
                   <Badge variant="outline">Configure Processes</Badge>
                   <Badge variant="outline">Set Algorithm Parameters</Badge>
                   <Badge variant="outline">Run Simulation</Badge>
+                  <Badge variant="outline">Learn with Explanations</Badge>
                 </div>
               </CardContent>
             </Card>
