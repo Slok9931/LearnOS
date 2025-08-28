@@ -53,6 +53,31 @@ const prepareRequestData = (request: SchedulingRequest) => {
   };
 };
 
+// Add proper error handling and data validation
+const validateSchedulingResult = (data: any): SchedulingResult => {
+  if (!data.success) {
+    return data;
+  }
+
+  // Ensure all required fields exist
+  const validatedData = {
+    success: true,
+    message: data.message || 'Success',
+    data: {
+      processes: data.data?.processes || [],
+      schedule: data.data?.schedule || [],
+      metrics: {
+        average_waiting_time: data.data?.metrics?.average_waiting_time ?? 0,
+        average_turnaround_time: data.data?.metrics?.average_turnaround_time ?? 0,
+        cpu_utilization: data.data?.metrics?.cpu_utilization ?? 0,
+        throughput: data.data?.metrics?.throughput
+      }
+    }
+  };
+
+  return validatedData;
+};
+
 // CPU Scheduling API functions
 export const schedulingApi = {
   // Health check
@@ -97,7 +122,8 @@ export const schedulingApi = {
       API_CONFIG.ENDPOINTS.CPU_SCHEDULING.FCFS,
       requestData
     );
-    return response.data;
+    
+    return validateSchedulingResult(response.data);
   },
 
   // Shortest Job First
@@ -109,7 +135,8 @@ export const schedulingApi = {
       API_CONFIG.ENDPOINTS.CPU_SCHEDULING.SJF,
       requestData
     );
-    return response.data;
+    
+    return validateSchedulingResult(response.data);
   },
 
   // Priority Scheduling
@@ -121,7 +148,8 @@ export const schedulingApi = {
       API_CONFIG.ENDPOINTS.CPU_SCHEDULING.PRIORITY,
       requestData
     );
-    return response.data;
+    
+    return validateSchedulingResult(response.data);
   },
 
   // Round Robin
@@ -138,7 +166,8 @@ export const schedulingApi = {
       API_CONFIG.ENDPOINTS.CPU_SCHEDULING.ROUND_ROBIN,
       requestData
     );
-    return response.data;
+    
+    return validateSchedulingResult(response.data);
   },
 
   // Multi-Level Feedback Queue
@@ -160,7 +189,8 @@ export const schedulingApi = {
       API_CONFIG.ENDPOINTS.CPU_SCHEDULING.MLFQ,
       requestData
     );
-    return response.data;
+    
+    return validateSchedulingResult(response.data);
   },
 
   // Get supported algorithms

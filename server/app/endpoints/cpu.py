@@ -1,15 +1,14 @@
 from fastapi import APIRouter, HTTPException
-from app.models.cpu import CPUScheduleRequest, MLFQConfig, Process
-from app.models.response import APIResponse
-from app.services.cpu import CPUSchedulerService
+from app.models.cpu import SchedulingRequest, Process
+from app.models.response import ApiResponse
+from app.services.cpu import CPUSchedulingService
 
 router = APIRouter(prefix="/api/cpu", tags=["CPU Scheduling"])
 
-def convert_request_to_process_objects(request_data: dict):
-    """Convert frontend request data to backend Process objects"""
+def convert_dict_to_scheduling_request(data: dict) -> SchedulingRequest:
+    """Convert frontend dictionary to SchedulingRequest model"""
     processes = []
-    for process_data in request_data.get('processes', []):
-        # Create Process object from dictionary
+    for process_data in data.get('processes', []):
         process = Process(
             pid=process_data.get('id', process_data.get('pid', 1)),
             arrival_time=process_data.get('arrival_time', 0),
@@ -17,253 +16,106 @@ def convert_request_to_process_objects(request_data: dict):
             priority=process_data.get('priority', 0)
         )
         processes.append(process)
-    return processes
-
-@router.post("/schedule", response_model=APIResponse)
-async def schedule_processes(request: CPUScheduleRequest):
-    """
-    Schedule processes using the specified algorithm
-    """
-    try:
-        if request.algo == "FCFS":
-            result = CPUSchedulerService.fcfs_scheduling(
-                processes=request.processes,
-                context_switch_cost=request.config.context_switch_cost
-            )
-        elif request.algo == "SJF":
-            result = CPUSchedulerService.sjf_scheduling(
-                processes=request.processes,
-                context_switch_cost=request.config.context_switch_cost,
-                preemptive=request.config.preemptive
-            )
-        elif request.algo == "Priority":
-            result = CPUSchedulerService.priority_scheduling(
-                processes=request.processes,
-                context_switch_cost=request.config.context_switch_cost,
-                preemptive=request.config.preemptive
-            )
-        elif request.algo == "RoundRobin":
-            if not request.config.time_quantum or request.config.time_quantum <= 0:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Time quantum must be specified and greater than 0 for Round Robin scheduling"
-                )
-            result = CPUSchedulerService.round_robin_scheduling(
-                processes=request.processes,
-                time_quantum=request.config.time_quantum,
-                context_switch_cost=request.config.context_switch_cost
-            )
-        elif request.algo == "MLFQ":
-            mlfq_config = request.config.mlfq_config
-            if not mlfq_config:
-                mlfq_config = MLFQConfig()
-            result = CPUSchedulerService.mlfq_scheduling(
-                processes=request.processes,
-                mlfq_config=mlfq_config,
-                context_switch_cost=request.config.context_switch_cost
-            )
-        else:
-            raise HTTPException(
-                status_code=400, 
-                detail=f"Algorithm '{request.algo}' not implemented yet"
-            )
-        
-        return APIResponse(
-            success=True,
-            message=f"{request.algo} scheduling completed successfully",
-            data=result
-        )
     
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+    return SchedulingRequest(
+        processes=processes,
+        context_switch_cost=data.get('context_switch_cost', 0.5),
+        time_quantum=data.get('time_quantum'),
+        preemptive=data.get('preemptive', False),
+        mlfq_config=data.get('mlfq_config')
+    )
 
-@router.post("/fcfs", response_model=APIResponse)
-async def fcfs_scheduling(request: dict):
-    """
-    FCFS (First Come First Serve) Scheduling Algorithm
-    """
+@router.post("/fcfs", response_model=ApiResponse)
+async def fcfs_scheduling(request_data: dict):
     try:
-        print(f"FCFS Request received: {request}")
+        print(f"FCFS Request received: {request_data}")
+        request = convert_dict_to_scheduling_request(request_data)
+        result = CPUSchedulingService.fcfs(request)
         
-        # Convert frontend format to backend Process objects
-        processes = convert_request_to_process_objects(request)
-        print(f"FCFS Converted processes: {[{'pid': p.pid, 'arrival_time': p.arrival_time, 'burst_time': p.burst_time, 'priority': p.priority} for p in processes]}")
-        
-        result = CPUSchedulerService.fcfs_scheduling(
-            processes=processes,
-            context_switch_cost=request.get('context_switch_cost', 0.5)
-        )
-        
-        return APIResponse(
+        return ApiResponse(
             success=True,
             message="FCFS scheduling completed successfully",
-            data=result
+            data=result.dict()
         )
-    
-    except ValueError as e:
-        print(f"FCFS ValueError: {str(e)}")
-        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        print(f"FCFS Exception: {str(e)}")  # Debug log
-        import traceback
-        print(f"FCFS Traceback: {traceback.format_exc()}")
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+        print(f"FCFS Error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/sjf", response_model=APIResponse)
-async def sjf_scheduling(request: dict):
-    """
-    SJF (Shortest Job First) Scheduling Algorithm
-    """
+@router.post("/sjf", response_model=ApiResponse)
+async def sjf_scheduling(request_data: dict):
     try:
-        print(f"SJF Request received: {request}")
+        print(f"SJF Request received: {request_data}")
+        request = convert_dict_to_scheduling_request(request_data)
+        result = CPUSchedulingService.sjf(request)
         
-        # Convert frontend format to backend Process objects
-        processes = convert_request_to_process_objects(request)
-        print(f"SJF Converted processes: {[{'pid': p.pid, 'arrival_time': p.arrival_time, 'burst_time': p.burst_time, 'priority': p.priority} for p in processes]}")
-        
-        result = CPUSchedulerService.sjf_scheduling(
-            processes=processes,
-            context_switch_cost=request.get('context_switch_cost', 0.5),
-            preemptive=request.get('preemptive', False)
-        )
-        
-        return APIResponse(
+        return ApiResponse(
             success=True,
             message="SJF scheduling completed successfully",
-            data=result
+            data=result.dict()
         )
-    
-    except ValueError as e:
-        print(f"SJF ValueError: {str(e)}")
-        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        print(f"SJF Exception: {str(e)}")  # Debug log
-        import traceback
-        print(f"SJF Traceback: {traceback.format_exc()}")
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+        print(f"SJF Error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/priority", response_model=APIResponse)
-async def priority_scheduling(request: dict):
-    """
-    Priority Scheduling Algorithm
-    """
+@router.post("/priority", response_model=ApiResponse)
+async def priority_scheduling(request_data: dict):
     try:
-        print(f"Priority Request received: {request}")
+        print(f"Priority Request received: {request_data}")
+        request = convert_dict_to_scheduling_request(request_data)
+        result = CPUSchedulingService.priority_scheduling(request)
         
-        # Convert frontend format to backend Process objects
-        processes = convert_request_to_process_objects(request)
-        print(f"Priority Converted processes: {[{'pid': p.pid, 'arrival_time': p.arrival_time, 'burst_time': p.burst_time, 'priority': p.priority} for p in processes]}")
-        
-        result = CPUSchedulerService.priority_scheduling(
-            processes=processes,
-            context_switch_cost=request.get('context_switch_cost', 0.5),
-            preemptive=request.get('preemptive', False)
-        )
-        
-        return APIResponse(
+        return ApiResponse(
             success=True,
             message="Priority scheduling completed successfully",
-            data=result
+            data=result.dict()
         )
-    
-    except ValueError as e:
-        print(f"Priority ValueError: {str(e)}")
-        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        print(f"Priority Exception: {str(e)}")  # Debug log
-        import traceback
-        print(f"Priority Traceback: {traceback.format_exc()}")
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+        print(f"Priority Error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/round-robin", response_model=APIResponse)
-async def round_robin_scheduling(request: dict):
-    """
-    Round Robin Scheduling Algorithm
-    """
+@router.post("/round-robin", response_model=ApiResponse)
+async def round_robin_scheduling(request_data: dict):
     try:
-        print(f"Round Robin Request received: {request}")
+        print(f"Round Robin Request received: {request_data}")
         
-        time_quantum = request.get('time_quantum')
-        if not time_quantum or time_quantum <= 0:
+        if not request_data.get('time_quantum') or request_data.get('time_quantum', 0) <= 0:
             raise HTTPException(
                 status_code=400,
                 detail="Time quantum must be specified and greater than 0 for Round Robin scheduling"
             )
         
-        # Convert frontend format to backend Process objects
-        processes = convert_request_to_process_objects(request)
-        print(f"Round Robin Converted processes: {[{'pid': p.pid, 'arrival_time': p.arrival_time, 'burst_time': p.burst_time, 'priority': p.priority} for p in processes]}")
+        request = convert_dict_to_scheduling_request(request_data)
+        result = CPUSchedulingService.round_robin(request)
         
-        result = CPUSchedulerService.round_robin_scheduling(
-            processes=processes,
-            time_quantum=time_quantum,
-            context_switch_cost=request.get('context_switch_cost', 0.5)
-        )
-        
-        return APIResponse(
+        return ApiResponse(
             success=True,
             message="Round Robin scheduling completed successfully",
-            data=result
+            data=result.dict()
         )
-    
-    except ValueError as e:
-        print(f"Round Robin ValueError: {str(e)}")
-        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        print(f"Round Robin Exception: {str(e)}")  # Debug log
-        import traceback
-        print(f"Round Robin Traceback: {traceback.format_exc()}")
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+        print(f"Round Robin Error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/mlfq", response_model=APIResponse)
-async def mlfq_scheduling(request: dict):
-    """
-    MLFQ (Multi-Level Feedback Queue) Scheduling Algorithm
-    """
+@router.post("/mlfq", response_model=ApiResponse)
+async def mlfq_scheduling(request_data: dict):
     try:
-        print(f"MLFQ Request received: {request}")
+        print(f"MLFQ Request received: {request_data}")
+        request = convert_dict_to_scheduling_request(request_data)
+        result = CPUSchedulingService.mlfq(request)
         
-        # Convert frontend format to backend Process objects
-        processes = convert_request_to_process_objects(request)
-        print(f"MLFQ Converted processes: {[{'pid': p.pid, 'arrival_time': p.arrival_time, 'burst_time': p.burst_time, 'priority': p.priority} for p in processes]}")
-        
-        mlfq_config_data = request.get('mlfq_config', {})
-        mlfq_config = MLFQConfig(
-            num_queues=mlfq_config_data.get('num_queues', 3),
-            time_quantums=mlfq_config_data.get('time_quantums', [2.0, 4.0, 8.0]),
-            aging_threshold=mlfq_config_data.get('aging_threshold', 10),
-            boost_interval=mlfq_config_data.get('boost_interval', 100)
-        )
-        
-        result = CPUSchedulerService.mlfq_scheduling(
-            processes=processes,
-            mlfq_config=mlfq_config,
-            context_switch_cost=request.get('context_switch_cost', 0.5)
-        )
-        
-        return APIResponse(
+        return ApiResponse(
             success=True,
             message="MLFQ scheduling completed successfully",
-            data=result
+            data=result.dict()
         )
-    
-    except ValueError as e:
-        print(f"MLFQ ValueError: {str(e)}")
-        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        print(f"MLFQ Exception: {str(e)}")  # Debug log
-        import traceback
-        print(f"MLFQ Traceback: {traceback.format_exc()}")
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+        print(f"MLFQ Error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/algorithms")
-async def get_supported_algorithms():
-    """
-    Get list of supported scheduling algorithms
-    """
-    return APIResponse(
+async def get_algorithms():
+    """Get list of supported scheduling algorithms"""
+    return ApiResponse(
         success=True,
         message="Supported algorithms retrieved",
         data={
@@ -276,3 +128,7 @@ async def get_supported_algorithms():
             ]
         }
     )
+
+@router.get("/health")
+async def health_check():
+    return {"status": "healthy", "service": "CPU Scheduling"}

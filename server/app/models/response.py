@@ -1,5 +1,8 @@
 from pydantic import BaseModel
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Generic, TypeVar
+from app.models.cpu import SchedulingResult
+
+T = TypeVar('T')
 
 class Event(BaseModel):
     time: float
@@ -27,14 +30,15 @@ class SimulationResult(BaseModel):
     events: List[Event] = []
     summary: SimulationSummary
 
-class APIResponse(BaseModel):
+class APIResponse(BaseModel, Generic[T]):
     success: bool
     message: str
-    data: Optional[Any] = None
-    error: Optional[str] = None
+    data: Optional[T] = None
 
-class ErrorResponse(BaseModel):
-    success: bool = False
+class SchedulingAPIResponse(APIResponse[SchedulingResult]):
+    pass
+
+class ApiResponse(BaseModel):
+    success: bool
     message: str
-    error: str
     data: Optional[Any] = None

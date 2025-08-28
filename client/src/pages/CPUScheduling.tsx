@@ -1,124 +1,125 @@
-import React, { useState, useEffect } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Plus, Trash2, Play, AlertCircle, Wifi, WifiOff } from 'lucide-react';
-import GanttChart from '@/components/charts/GanttChart';
-import { ResultsTable } from '@/components/results/ResultsTable';
-import schedulingApi, { handleApiError } from '@/services/api';
-import { Process, SchedulingRequest } from '@/types/scheduling';
+import React, { useState, useEffect } from 'react'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Badge } from '@/components/ui/badge'
+import { Separator } from '@/components/ui/separator'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Plus, Trash2, Play, AlertCircle, Wifi, WifiOff } from 'lucide-react'
+import { GanttChart } from '@/components/charts/GanttChart'
+import { MetricsChart } from '@/components/charts/MetricsChart'
+import { ResultsTable } from '@/components/results/ResultsTable'
+import schedulingApi, { handleApiError } from '@/services/api'
+import { Process, SchedulingRequest, SchedulingResult } from '@/types/scheduling'
 
 export default function CPUScheduling() {
   const [processes, setProcesses] = useState<Process[]>([
     { id: 1, arrival_time: 0, burst_time: 5, priority: 1 }
-  ]);
-  const [timeQuantum, setTimeQuantum] = useState(2);
-  const [results, setResults] = useState<any>(null);
-  const [loading, setLoading] = useState(false);
-  const [activeAlgorithm, setActiveAlgorithm] = useState('fcfs');
-  const [serverStatus, setServerStatus] = useState<'checking' | 'healthy' | 'unhealthy'>('checking');
-  const [error, setError] = useState<string | null>(null);
+  ])
+  const [timeQuantum, setTimeQuantum] = useState(2)
+  const [results, setResults] = useState<SchedulingResult | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [activeAlgorithm, setActiveAlgorithm] = useState('fcfs')
+  const [serverStatus, setServerStatus] = useState<'checking' | 'healthy' | 'unhealthy'>('checking')
+  const [error, setError] = useState<string | null>(null)
 
   // Check server health on component mount
   useEffect(() => {
-    checkServerHealth();
-  }, []);
+    checkServerHealth()
+  }, [])
 
   const checkServerHealth = async () => {
     try {
-      setServerStatus('checking');
-      const health = await schedulingApi.healthCheck();
-      setServerStatus(health.status === 'healthy' ? 'healthy' : 'unhealthy');
-      
+      setServerStatus('checking')
+      const health = await schedulingApi.healthCheck()
+      setServerStatus(health.status === 'healthy' ? 'healthy' : 'unhealthy')
+
       if (health.status === 'healthy') {
-        setError(null);
-        // Test the connection
-        const connectionTest = await schedulingApi.testConnection();
+        setError(null)
+        const connectionTest = await schedulingApi.testConnection()
         if (!connectionTest.success) {
-          setError(connectionTest.message);
+          setError(connectionTest.message)
         }
       }
     } catch (error) {
-      console.error('Health check error:', error);
-      setServerStatus('unhealthy');
-      setError('Unable to connect to server. Please ensure the server is running on http://localhost:5000');
+      console.error('Health check error:', error)
+      setServerStatus('unhealthy')
+      setError('Unable to connect to server. Please ensure the server is running on http://localhost:5000')
     }
-  };
+  }
 
   const addProcess = () => {
-    const newId = Math.max(...processes.map(p => p.id), 0) + 1;
-    setProcesses([...processes, { id: newId, arrival_time: 0, burst_time: 1, priority: 1 }]);
-  };
+    const newId = Math.max(...processes.map(p => p.id), 0) + 1
+    setProcesses([...processes, { id: newId, arrival_time: 0, burst_time: 1, priority: 1 }])
+  }
 
   const removeProcess = (id: number) => {
     if (processes.length > 1) {
-      setProcesses(processes.filter(p => p.id !== id));
+      setProcesses(processes.filter(p => p.id !== id))
     }
-  };
+  }
 
   const updateProcess = (id: number, field: keyof Process, value: number) => {
-    setProcesses(processes.map(p => 
+    setProcesses(processes.map(p =>
       p.id === id ? { ...p, [field]: value } : p
-    ));
-  };
+    ))
+  }
 
   const validateProcesses = (): boolean => {
     for (const process of processes) {
       if (process.burst_time <= 0) {
-        setError(`Process ${process.id}: Burst time must be greater than 0`);
-        return false;
+        setError(`Process ${process.id}: Burst time must be greater than 0`)
+        return false
       }
       if (process.arrival_time < 0) {
-        setError(`Process ${process.id}: Arrival time cannot be negative`);
-        return false;
+        setError(`Process ${process.id}: Arrival time cannot be negative`)
+        return false
       }
       if ((activeAlgorithm === 'priority' || activeAlgorithm === 'mlfq') && (!process.priority || process.priority < 0)) {
-        setError(`Process ${process.id}: Priority must be specified and non-negative for ${activeAlgorithm} scheduling`);
-        return false;
+        setError(`Process ${process.id}: Priority must be specified and non-negative for ${activeAlgorithm} scheduling`)
+        return false
       }
     }
-    return true;
-  };
+    return true
+  }
 
+  // Add better error handling and debugging in the runAlgorithm function
   const runAlgorithm = async (algorithm: string) => {
     if (serverStatus !== 'healthy') {
-      setError('Server is not available. Please start the backend server.');
-      return;
+      setError('Server is not available. Please start the backend server.')
+      return
     }
 
     if (!validateProcesses()) {
-      return;
+      return
     }
 
-    setLoading(true);
-    setError(null);
-    
+    setLoading(true)
+    setError(null)
+
     try {
       const request: SchedulingRequest = {
         processes: processes.map(p => ({
           ...p,
-          priority: p.priority || 0, // Ensure priority is always set
+          priority: p.priority || 0,
         })),
         context_switch_cost: 0.5,
-      };
+      }
 
       // Add algorithm-specific parameters
       if (algorithm === 'round-robin') {
         if (timeQuantum <= 0) {
-          setError('Time quantum must be greater than 0 for Round Robin scheduling');
-          setLoading(false);
-          return;
+          setError('Time quantum must be greater than 0 for Round Robin scheduling')
+          setLoading(false)
+          return
         }
-        request.time_quantum = timeQuantum;
+        request.time_quantum = timeQuantum
       }
 
       if (algorithm === 'sjf' || algorithm === 'priority') {
-        request.preemptive = false; // You can make this configurable later
+        request.preemptive = false
       }
 
       if (algorithm === 'mlfq') {
@@ -127,47 +128,66 @@ export default function CPUScheduling() {
           time_quantums: [2, 4, 8],
           aging_threshold: 10,
           boost_interval: 100
-        };
+        }
       }
 
-      console.log('Sending request:', request);
+      console.log('Sending request:', request)
 
-      let result;
+      let result: SchedulingResult
       switch (algorithm) {
         case 'fcfs':
-          result = await schedulingApi.fcfs(request);
-          break;
+          result = await schedulingApi.fcfs(request)
+          break
         case 'sjf':
-          result = await schedulingApi.sjf(request);
-          break;
+          result = await schedulingApi.sjf(request)
+          break
         case 'priority':
-          result = await schedulingApi.priority(request);
-          break;
+          result = await schedulingApi.priority(request)
+          break
         case 'round-robin':
-          result = await schedulingApi.roundRobin(request);
-          break;
+          result = await schedulingApi.roundRobin(request)
+          break
         case 'mlfq':
-          result = await schedulingApi.mlfq(request);
-          break;
+          result = await schedulingApi.mlfq(request)
+          break
         default:
-          throw new Error(`Algorithm ${algorithm} not implemented`);
+          throw new Error(`Algorithm ${algorithm} not implemented`)
       }
 
-      console.log('Received result:', result);
+      console.log('Received result:', result)
 
       if (result.success) {
-        setResults(result.data);
-        setError(null);
+        // Additional validation before setting results
+        if (!result.data) {
+          setError('No data received from server')
+          return
+        }
+
+        if (!result.data.processes || result.data.processes.length === 0) {
+          setError('No process data received from server')
+          return
+        }
+
+        if (!result.data.schedule || result.data.schedule.length === 0) {
+          console.warn('No schedule data received - Gantt chart will be empty')
+        }
+
+        if (!result.data.metrics) {
+          console.warn('No metrics data received')
+        }
+
+        setResults(result)
+        setError(null)
       } else {
-        setError(result.message || 'Unknown error occurred');
+        setError(result.message || 'Unknown error occurred')
       }
     } catch (error: any) {
-      console.error('Error running algorithm:', error);
-      setError(handleApiError(error));
+      console.error('Error running algorithm:', error)
+      setError(handleApiError(error))
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
+  }
 
   return (
     <div className="container mx-auto p-6 space-y-6">
@@ -177,7 +197,7 @@ export default function CPUScheduling() {
         <p className="text-muted-foreground">
           Simulate and visualize different CPU scheduling algorithms
         </p>
-        
+
         {/* Server Status */}
         <div className="flex items-center justify-center gap-2 mt-4">
           {serverStatus === 'checking' && (
@@ -339,7 +359,7 @@ export default function CPUScheduling() {
                           {getAlgorithmDescription(algorithm)}
                         </CardDescription>
                       </div>
-                      <Button 
+                      <Button
                         onClick={() => runAlgorithm(algorithm)}
                         disabled={loading || serverStatus !== 'healthy'}
                         className="flex items-center gap-2"
@@ -349,32 +369,30 @@ export default function CPUScheduling() {
                       </Button>
                     </div>
                   </CardHeader>
-                  
-                  {results && (
+
+                  {results && results.success && (
                     <CardContent className="space-y-6">
+                      {/* Quick Metrics */}
                       <div className="grid grid-cols-3 gap-4">
                         <Card className="p-4 text-center">
                           <div className="text-2xl font-bold text-blue-600">
-                            {results.metrics?.average_waiting_time?.toFixed(2) || 'N/A'}
+                            {results.data?.metrics?.average_waiting_time?.toFixed(2) || 'N/A'}
                           </div>
                           <div className="text-sm text-muted-foreground">Avg Waiting Time</div>
                         </Card>
                         <Card className="p-4 text-center">
                           <div className="text-2xl font-bold text-green-600">
-                            {results.metrics?.average_turnaround_time?.toFixed(2) || 'N/A'}
+                            {results.data?.metrics?.average_turnaround_time?.toFixed(2) || 'N/A'}
                           </div>
                           <div className="text-sm text-muted-foreground">Avg Turnaround Time</div>
                         </Card>
                         <Card className="p-4 text-center">
                           <div className="text-2xl font-bold text-purple-600">
-                            {results.metrics?.cpu_utilization?.toFixed(2) || 'N/A'}%
+                            {results.data?.metrics?.cpu_utilization?.toFixed(2) || 'N/A'}%
                           </div>
                           <div className="text-sm text-muted-foreground">CPU Utilization</div>
                         </Card>
                       </div>
-                      
-                      <GanttChart data={results.schedule || []} />
-                      <ResultsTable data={results.processes || []} />
                     </CardContent>
                   )}
                 </Card>
@@ -383,8 +401,32 @@ export default function CPUScheduling() {
           </Tabs>
         </div>
       </div>
+
+      {/* Results Section */}
+      {results && results.success && results.data && (
+        <div className="space-y-6">
+          {/* Gantt Chart */}
+          <GanttChart
+            data={results.data.schedule || []}
+            title={`${activeAlgorithm.toUpperCase().replace('-', ' ')} - Gantt Chart`}
+          />
+
+          {/* Metrics Chart */}
+          <MetricsChart
+            processes={results.data.processes || []}
+            metrics={results.data.metrics}
+            title={`${activeAlgorithm.toUpperCase().replace('-', ' ')} - Performance Metrics`}
+          />
+
+          {/* Results Table */}
+          <ResultsTable
+            data={results.data.processes || []}
+            title={`${activeAlgorithm.toUpperCase().replace('-', ' ')} - Process Results`}
+          />
+        </div>
+      )}
     </div>
-  );
+  )
 }
 
 function getAlgorithmDescription(algorithm: string): string {
@@ -394,6 +436,6 @@ function getAlgorithmDescription(algorithm: string): string {
     'priority': 'Priority Scheduling - Processes execute based on priority levels (0 = highest priority)',
     'round-robin': 'Round Robin - Each process gets equal time slices in cyclic order',
     'mlfq': 'Multi-Level Feedback Queue - Dynamic priority-based scheduling with multiple queues'
-  };
-  return descriptions[algorithm as keyof typeof descriptions] || '';
+  }
+  return descriptions[algorithm as keyof typeof descriptions] || ''
 }

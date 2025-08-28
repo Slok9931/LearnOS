@@ -70,31 +70,54 @@ export interface SchedulingRequest {
   };
 }
 
+export interface ScheduleEntry {
+  process_id: number;
+  start_time: number;
+  end_time: number;
+  type?: string;
+  queue_level?: number;
+}
+
+export interface ProcessResult {
+  pid: number;
+  arrival_time: number;
+  burst_time: number;
+  waiting_time: number;
+  turnaround_time: number;
+  completion_time: number;
+  priority?: number;
+}
+
+export interface SchedulingMetrics {
+  average_waiting_time: number;
+  average_turnaround_time: number;
+  cpu_utilization: number;
+  throughput?: number;
+}
+
 export interface SchedulingResult {
   success: boolean;
   message: string;
   data: {
-    processes: Array<{
-      pid?: number;
-      id?: number;
-      arrival_time: number;
-      burst_time: number;
-      waiting_time: number;
-      turnaround_time: number;
-      completion_time: number;
-      priority?: number;
-    }>;
-    schedule: Array<{
-      process_id: number;
-      start_time: number;
-      end_time: number;
-      type?: string;
-    }>;
-    metrics: {
-      average_waiting_time: number;
-      average_turnaround_time: number;
-      cpu_utilization: number;
-      throughput?: number;
-    };
+    processes: ProcessResult[];
+    schedule: ScheduleEntry[];
+    metrics: SchedulingMetrics;
   };
+}
+
+// Chart-specific types
+export interface GanttChartData {
+  process_id: number;
+  start_time: number;
+  end_time: number;
+  duration: number;
+  type?: string;
+  queue_level?: number;
+}
+
+export interface MetricsChartData {
+  process_id: number;
+  waiting_time: number;
+  turnaround_time: number;
+  burst_time: number;
 }

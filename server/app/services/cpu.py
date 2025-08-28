@@ -1,874 +1,404 @@
-from typing import List, Dict
-from app.models.cpu import Process, ProcessResult, CPUScheduleResponse, MLFQConfig
+from typing import List
+from app.models.cpu import (
+    Process, SchedulingRequest, ProcessResult, ScheduleEntry, 
+    SchedulingMetrics, SchedulingResult, MLFQConfig
+)
 
-class CPUSchedulerService:
+class CPUSchedulingService:
     
     @staticmethod
-    def fcfs_scheduling(processes: List[Process], context_switch_cost: float = 0) -> CPUScheduleResponse:
-        """
-        First Come First Serve (FCFS) Scheduling Algorithm
-        """
-        if not processes:
-            raise ValueError("No processes provided")
-        
-        sorted_processes = sorted(processes, key=lambda p: (p.arrival_time, p.pid))
-        
+    def fcfs(request: SchedulingRequest) -> SchedulingResult:
+        """First Come First Serve scheduling algorithm"""
+        processes = sorted(request.processes, key=lambda x: x.arrival_time)
+        current_time = 0
+        schedule = []
         results = []
-        gantt_chart = []
-        current_time = 0.0
         
-        for i, process in enumerate(sorted_processes):
+        for process in processes:
             if current_time < process.arrival_time:
-                if current_time > 0:
-                    gantt_chart.append({
-                        "process": "IDLE",
-                        "start": current_time,
-                        "end": process.arrival_time
-                    })
-                current_time = float(process.arrival_time)
-            
-            if i > 0 and context_switch_cost > 0:
-                current_time += context_switch_cost
-                gantt_chart.append({
-                    "process": "CONTEXT_SWITCH",
-                    "start": current_time - context_switch_cost,
-                    "end": current_time
-                })
+                if current_time < process.arrival_time:
+                    schedule.append(ScheduleEntry(
+                        process_id=0,
+                        start_time=current_time,
+                        end_time=process.arrival_time,
+                        type="idle"
+                    ))
+                current_time = process.arrival_time
             
             start_time = current_time
-            completion_time = current_time + process.burst_time
-            turnaround_time = completion_time - process.arrival_time
+            end_time = current_time + process.burst_time
+            
+            schedule.append(ScheduleEntry(
+                process_id=process.pid,
+                start_time=start_time,
+                end_time=end_time,
+                type="execution"
+            ))
+            
             waiting_time = start_time - process.arrival_time
-            response_time = waiting_time
+            turnaround_time = end_time - process.arrival_time
             
-            gantt_chart.append({
-                "process": f"P{process.pid}",
-                "start": start_time,
-                "end": completion_time
-            })
-            
-            result = ProcessResult(
+            results.append(ProcessResult(
                 pid=process.pid,
                 arrival_time=process.arrival_time,
                 burst_time=process.burst_time,
-                start_time=start_time,
-                completion_time=completion_time,
-                turnaround_time=turnaround_time,
                 waiting_time=waiting_time,
-                response_time=response_time
-            )
-            results.append(result)
+                turnaround_time=turnaround_time,
+                completion_time=end_time,
+                priority=process.priority
+            ))
             
-            current_time = completion_time
+            current_time = end_time
         
-        total_processes = len(results)
-        avg_waiting_time = sum(r.waiting_time for r in results) / total_processes
-        avg_turnaround_time = sum(r.turnaround_time for r in results) / total_processes
-        avg_response_time = sum(r.response_time for r in results) / total_processes
-        
-        total_time = max(r.completion_time for r in results)
+        total_waiting_time = sum(p.waiting_time for p in results)
+        total_turnaround_time = sum(p.turnaround_time for p in results)
         total_burst_time = sum(p.burst_time for p in processes)
-        cpu_utilization = (total_burst_time / total_time) * 100 if total_time > 0 else 0
-        throughput = total_processes / total_time if total_time > 0 else 0
         
-        return CPUScheduleResponse(
-            algorithm="FCFS",
-            total_processes=total_processes,
-            total_time=total_time,
-            avg_waiting_time=round(avg_waiting_time, 2),
-            avg_turnaround_time=round(avg_turnaround_time, 2),
-            avg_response_time=round(avg_response_time, 2),
-            cpu_utilization=round(cpu_utilization, 2),
-            throughput=round(throughput, 4),
+        metrics = SchedulingMetrics(
+            average_waiting_time=total_waiting_time / len(results) if results else 0,
+            average_turnaround_time=total_turnaround_time / len(results) if results else 0,
+            cpu_utilization=(total_burst_time / current_time) * 100 if current_time > 0 else 0,
+            throughput=len(results) / current_time if current_time > 0 else 0
+        )
+        
+        return SchedulingResult(
             processes=results,
-            gantt_chart=gantt_chart
+            schedule=schedule,
+            metrics=metrics
         )
     
     @staticmethod
-    def sjf_scheduling(processes: List[Process], context_switch_cost: float = 0, preemptive: bool = False) -> CPUScheduleResponse:
-        """
-        Shortest Job First (SJF) Scheduling Algorithm
-        Supports both non-preemptive and preemptive (SRTF) versions
-        """
-        if not processes:
-            raise ValueError("No processes provided")
+    def sjf(request: SchedulingRequest) -> SchedulingResult:
+        """Shortest Job First scheduling algorithm"""
+        processes = request.processes.copy()
+        current_time = 0
+        schedule = []
+        results = []
+        completed = []
         
-        if preemptive:
-            return CPUSchedulerService._sjf_preemptive(processes, context_switch_cost)
-        else:
-            return CPUSchedulerService._sjf_non_preemptive(processes, context_switch_cost)
-    
-    @staticmethod
-    def priority_scheduling(processes: List[Process], context_switch_cost: float = 0, preemptive: bool = False) -> CPUScheduleResponse:
-        """
-        Priority Scheduling Algorithm
-        Supports both non-preemptive and preemptive versions
-        Lower priority number = Higher priority (0 is highest priority)
-        """
-        if not processes:
-            raise ValueError("No processes provided")
-        
-        if preemptive:
-            return CPUSchedulerService._priority_preemptive(processes, context_switch_cost)
-        else:
-            return CPUSchedulerService._priority_non_preemptive(processes, context_switch_cost)
-    
-    @staticmethod
-    def round_robin_scheduling(processes: List[Process], time_quantum: float, context_switch_cost: float = 0) -> CPUScheduleResponse:
-        """
-        Round Robin Scheduling Algorithm
-        Time-sharing algorithm with fixed time quantum
-        """
-        if not processes:
-            raise ValueError("No processes provided")
-        
-        if time_quantum <= 0:
-            raise ValueError("Time quantum must be greater than 0")
-        
-        working_processes = []
-        for process in processes:
-            working_process = Process(
-                pid=process.pid,
-                arrival_time=process.arrival_time,
-                burst_time=process.burst_time,
-                priority=process.priority,
-                remaining_time=float(process.burst_time)
-            )
-            working_processes.append(working_process)
-        
-        completed_processes = []
-        gantt_chart = []
-        ready_queue = []
-        current_time = 0.0
-        process_start_times = {}
-        process_response_times = {}
-        
-        max_time = sum(p.burst_time for p in processes) + max(p.arrival_time for p in processes) + len(processes) * (context_switch_cost + time_quantum)
-        
-        while current_time < max_time and len(completed_processes) < len(processes):
-            for process in working_processes:
-                if (process.arrival_time <= current_time and 
-                    process.remaining_time > 0 and 
-                    process not in ready_queue):
-                    ready_queue.append(process)
+        while len(completed) < len(processes):
+            available = [p for p in processes if p.arrival_time <= current_time and p.pid not in [c.pid for c in completed]]
             
-            if not ready_queue:
-                next_arrivals = [p.arrival_time for p in working_processes 
-                               if p.arrival_time > current_time and p.remaining_time > 0]
-                if not next_arrivals:
-                    break
-                
-                next_time = min(next_arrivals)
-                if current_time < next_time:
-                    gantt_chart.append({
-                        "process": "IDLE",
-                        "start": current_time,
-                        "end": next_time
-                    })
-                current_time = next_time
+            if not available:
+                next_arrival = min(p.arrival_time for p in processes if p.pid not in [c.pid for c in completed])
+                schedule.append(ScheduleEntry(
+                    process_id=0,
+                    start_time=current_time,
+                    end_time=next_arrival,
+                    type="idle"
+                ))
+                current_time = next_arrival
                 continue
             
-            current_process = ready_queue.pop(0)
+            shortest = min(available, key=lambda x: x.burst_time)
             
-            if gantt_chart and context_switch_cost > 0:
-                last_entry = gantt_chart[-1]
-                if last_entry["process"] != f"P{current_process.pid}" and last_entry["process"] != "IDLE":
-                    gantt_chart.append({
-                        "process": "CONTEXT_SWITCH",
-                        "start": current_time,
-                        "end": current_time + context_switch_cost
-                    })
-                    current_time += context_switch_cost
+            start_time = current_time
+            end_time = current_time + shortest.burst_time
             
-            if current_process.pid not in process_response_times:
-                process_response_times[current_process.pid] = current_time - current_process.arrival_time
-                process_start_times[current_process.pid] = current_time
+            schedule.append(ScheduleEntry(
+                process_id=shortest.pid,
+                start_time=start_time,
+                end_time=end_time,
+                type="execution"
+            ))
             
-            execution_time = min(time_quantum, current_process.remaining_time)
+            waiting_time = start_time - shortest.arrival_time
+            turnaround_time = end_time - shortest.arrival_time
             
-            gantt_chart.append({
-                "process": f"P{current_process.pid}",
-                "start": current_time,
-                "end": current_time + execution_time,
-                "quantum_used": execution_time
-            })
+            results.append(ProcessResult(
+                pid=shortest.pid,
+                arrival_time=shortest.arrival_time,
+                burst_time=shortest.burst_time,
+                waiting_time=waiting_time,
+                turnaround_time=turnaround_time,
+                completion_time=end_time,
+                priority=shortest.priority
+            ))
             
-            current_process.remaining_time -= execution_time
-            current_time += execution_time
+            completed.append(shortest)
+            current_time = end_time
+        
+        total_waiting_time = sum(p.waiting_time for p in results)
+        total_turnaround_time = sum(p.turnaround_time for p in results)
+        total_burst_time = sum(p.burst_time for p in processes)
+        
+        metrics = SchedulingMetrics(
+            average_waiting_time=total_waiting_time / len(results) if results else 0,
+            average_turnaround_time=total_turnaround_time / len(results) if results else 0,
+            cpu_utilization=(total_burst_time / current_time) * 100 if current_time > 0 else 0,
+            throughput=len(results) / current_time if current_time > 0 else 0
+        )
+        
+        return SchedulingResult(
+            processes=results,
+            schedule=schedule,
+            metrics=metrics
+        )
+    
+    @staticmethod
+    def priority_scheduling(request: SchedulingRequest) -> SchedulingResult:
+        """Priority scheduling algorithm (non-preemptive)"""
+        processes = request.processes.copy()
+        current_time = 0
+        schedule = []
+        results = []
+        completed = []
+        
+        while len(completed) < len(processes):
+            available = [p for p in processes if p.arrival_time <= current_time and p.pid not in [c.pid for c in completed]]
             
-            for process in working_processes:
-                if (process.arrival_time <= current_time and 
-                    process.remaining_time > 0 and 
-                    process not in ready_queue and 
-                    process != current_process):
-                    ready_queue.append(process)
+            if not available:
+                next_arrival = min(p.arrival_time for p in processes if p.pid not in [c.pid for c in completed])
+                schedule.append(ScheduleEntry(
+                    process_id=0,
+                    start_time=current_time,
+                    end_time=next_arrival,
+                    type="idle"
+                ))
+                current_time = next_arrival
+                continue
             
-            if current_process.remaining_time <= 0:
+            highest_priority = min(available, key=lambda x: (x.priority, x.arrival_time))
+            
+            start_time = current_time
+            end_time = current_time + highest_priority.burst_time
+            
+            schedule.append(ScheduleEntry(
+                process_id=highest_priority.pid,
+                start_time=start_time,
+                end_time=end_time,
+                type="execution"
+            ))
+            
+            waiting_time = start_time - highest_priority.arrival_time
+            turnaround_time = end_time - highest_priority.arrival_time
+            
+            results.append(ProcessResult(
+                pid=highest_priority.pid,
+                arrival_time=highest_priority.arrival_time,
+                burst_time=highest_priority.burst_time,
+                waiting_time=waiting_time,
+                turnaround_time=turnaround_time,
+                completion_time=end_time,
+                priority=highest_priority.priority
+            ))
+            
+            completed.append(highest_priority)
+            current_time = end_time
+        
+        total_waiting_time = sum(p.waiting_time for p in results)
+        total_turnaround_time = sum(p.turnaround_time for p in results)
+        total_burst_time = sum(p.burst_time for p in processes)
+        
+        metrics = SchedulingMetrics(
+            average_waiting_time=total_waiting_time / len(results) if results else 0,
+            average_turnaround_time=total_turnaround_time / len(results) if results else 0,
+            cpu_utilization=(total_burst_time / current_time) * 100 if current_time > 0 else 0,
+            throughput=len(results) / current_time if current_time > 0 else 0
+        )
+        
+        return SchedulingResult(
+            processes=results,
+            schedule=schedule,
+            metrics=metrics
+        )
+    
+    @staticmethod
+    def round_robin(request: SchedulingRequest) -> SchedulingResult:
+        """Round Robin scheduling algorithm"""
+        processes = request.processes.copy()
+        time_quantum = request.time_quantum or 2.0
+        current_time = 0
+        schedule = []
+        results = []
+        queue = []
+        remaining_times = {p.pid: p.burst_time for p in processes}
+        
+        processes.sort(key=lambda x: x.arrival_time)
+        process_index = 0
+        
+        while queue or process_index < len(processes) or any(t > 0 for t in remaining_times.values()):
+            while process_index < len(processes) and processes[process_index].arrival_time <= current_time:
+                if remaining_times[processes[process_index].pid] > 0:
+                    queue.append(processes[process_index])
+                process_index += 1
+            
+            if not queue:
+                if process_index < len(processes):
+                    next_arrival = processes[process_index].arrival_time
+                    schedule.append(ScheduleEntry(
+                        process_id=0,
+                        start_time=current_time,
+                        end_time=next_arrival,
+                        type="idle"
+                    ))
+                    current_time = next_arrival
+                    continue
+                else:
+                    break
+            
+            current_process = queue.pop(0)
+            
+            if remaining_times[current_process.pid] <= 0:
+                continue
+            
+            execution_time = min(time_quantum, remaining_times[current_process.pid])
+            start_time = current_time
+            end_time = current_time + execution_time
+            
+            schedule.append(ScheduleEntry(
+                process_id=current_process.pid,
+                start_time=start_time,
+                end_time=end_time,
+                type="execution"
+            ))
+            
+            remaining_times[current_process.pid] -= execution_time
+            current_time = end_time
+            
+            while process_index < len(processes) and processes[process_index].arrival_time <= current_time:
+                if remaining_times[processes[process_index].pid] > 0:
+                    queue.append(processes[process_index])
+                process_index += 1
+            
+            if remaining_times[current_process.pid] > 0:
+                queue.append(current_process)
+            else:
                 completion_time = current_time
+                waiting_time = completion_time - current_process.arrival_time - current_process.burst_time
                 turnaround_time = completion_time - current_process.arrival_time
-                waiting_time = turnaround_time - current_process.burst_time
-                response_time = process_response_times[current_process.pid]
                 
-                result = ProcessResult(
+                results.append(ProcessResult(
                     pid=current_process.pid,
                     arrival_time=current_process.arrival_time,
                     burst_time=current_process.burst_time,
-                    start_time=process_start_times[current_process.pid],
-                    completion_time=completion_time,
-                    turnaround_time=turnaround_time,
                     waiting_time=waiting_time,
-                    response_time=response_time
-                )
-                completed_processes.append(result)
-            else:
-                ready_queue.append(current_process)
+                    turnaround_time=turnaround_time,
+                    completion_time=completion_time,
+                    priority=current_process.priority
+                ))
         
-        completed_processes.sort(key=lambda x: x.pid)
-        
-        total_processes = len(completed_processes)
-        avg_waiting_time = sum(r.waiting_time for r in completed_processes) / total_processes
-        avg_turnaround_time = sum(r.turnaround_time for r in completed_processes) / total_processes
-        avg_response_time = sum(r.response_time for r in completed_processes) / total_processes
-        
-        total_time = max(r.completion_time for r in completed_processes)
+        total_waiting_time = sum(p.waiting_time for p in results)
+        total_turnaround_time = sum(p.turnaround_time for p in results)
         total_burst_time = sum(p.burst_time for p in processes)
-        cpu_utilization = (total_burst_time / total_time) * 100 if total_time > 0 else 0
-        throughput = total_processes / total_time if total_time > 0 else 0
         
-        return CPUScheduleResponse(
-            algorithm=f"Round Robin (TQ={time_quantum})",
-            total_processes=total_processes,
-            total_time=total_time,
-            avg_waiting_time=round(avg_waiting_time, 2),
-            avg_turnaround_time=round(avg_turnaround_time, 2),
-            avg_response_time=round(avg_response_time, 2),
-            cpu_utilization=round(cpu_utilization, 2),
-            throughput=round(throughput, 4),
-            processes=completed_processes,
-            gantt_chart=gantt_chart
+        metrics = SchedulingMetrics(
+            average_waiting_time=total_waiting_time / len(results) if results else 0,
+            average_turnaround_time=total_turnaround_time / len(results) if results else 0,
+            cpu_utilization=(total_burst_time / current_time) * 100 if current_time > 0 else 0,
+            throughput=len(results) / current_time if current_time > 0 else 0
         )
-
+        
+        return SchedulingResult(
+            processes=results,
+            schedule=schedule,
+            metrics=metrics
+        )
+    
     @staticmethod
-    def mlfq_scheduling(processes: List[Process], mlfq_config: MLFQConfig, context_switch_cost: float = 0) -> CPUScheduleResponse:
-        """
-        Multi-Level Feedback Queue (MLFQ) Scheduling Algorithm
-        Features:
-        - Multiple priority queues with different time quantums
-        - Process aging to prevent starvation
-        - Priority boost mechanism
-        """
-        if not processes:
-            raise ValueError("No processes provided")
+    def mlfq(request: SchedulingRequest) -> SchedulingResult:
+        """Multi-Level Feedback Queue scheduling algorithm"""
+        processes = request.processes.copy()
+        mlfq_config = request.mlfq_config or MLFQConfig()
         
-        if not mlfq_config:
-            raise ValueError("MLFQ configuration required")
-        
-        if len(mlfq_config.time_quantums) != mlfq_config.num_queues:
-            raise ValueError("Number of time quantums must match number of queues")
-        
-        class MLFQProcess:
-            def __init__(self, process: Process):
-                self.pid = process.pid
-                self.arrival_time = process.arrival_time
-                self.burst_time = process.burst_time
-                self.priority = process.priority
-                self.remaining_time = float(process.burst_time)
-                self.current_queue = 0
-                self.time_in_queue = 0
-                self.last_boost_time = 0
-                self.first_run = True
-        
-        working_processes = [MLFQProcess(p) for p in processes]
+        current_time = 0
+        schedule = []
+        results = []
         
         queues = [[] for _ in range(mlfq_config.num_queues)]
-        completed_processes = []
-        gantt_chart = []
-        current_time = 0.0
-        process_start_times = {}
-        process_response_times = {}
-        last_boost_time = 0
+        remaining_times = {p.pid: p.burst_time for p in processes}
+        process_queue_level = {p.pid: 0 for p in processes}
         
-        process_wait_start = {}
+        processes.sort(key=lambda x: x.arrival_time)
+        process_index = 0
         
-        max_time = sum(p.burst_time for p in processes) * 3 + max(p.arrival_time for p in processes)
-        
-        while current_time < max_time and len(completed_processes) < len(processes):
-            for wp in working_processes:
-                if (wp.arrival_time <= current_time and 
-                    wp.remaining_time > 0 and 
-                    wp not in [p for queue in queues for p in queue]):
-                    queues[0].append(wp)
-                    process_wait_start[wp.pid] = current_time
+        while any(queues) or process_index < len(processes) or any(t > 0 for t in remaining_times.values()):
+            while process_index < len(processes) and processes[process_index].arrival_time <= current_time:
+                if remaining_times[processes[process_index].pid] > 0:
+                    queues[0].append(processes[process_index])
+                    process_queue_level[processes[process_index].pid] = 0
+                process_index += 1
             
-            if current_time - last_boost_time >= mlfq_config.boost_interval:
-                all_processes = []
-                for queue in queues:
-                    all_processes.extend(queue)
-                    queue.clear()
-                
-                for wp in all_processes:
-                    wp.current_queue = 0
-                    wp.time_in_queue = 0
-                    wp.last_boost_time = current_time
-                    queues[0].append(wp)
-                
-                last_boost_time = current_time
-                
-                if all_processes:
-                    gantt_chart.append({
-                        "process": "PRIORITY_BOOST",
-                        "start": current_time,
-                        "end": current_time + 0.1
-                    })
-                    current_time += 0.1
-            
-            for queue_idx in range(1, mlfq_config.num_queues):
-                for wp in queues[queue_idx][:]:
-                    if (wp.pid in process_wait_start and 
-                        current_time - process_wait_start[wp.pid] >= mlfq_config.aging_threshold):
-                        queues[queue_idx].remove(wp)
-                        wp.current_queue = max(0, queue_idx - 1)
-                        wp.time_in_queue = 0
-                        queues[wp.current_queue].append(wp)
-                        process_wait_start[wp.pid] = current_time
-            
-            current_process = None
-            current_queue_idx = -1
-            
-            for queue_idx in range(mlfq_config.num_queues):
-                if queues[queue_idx]:
-                    current_process = queues[queue_idx].pop(0)
-                    current_queue_idx = queue_idx
+            current_queue_level = None
+            for i in range(len(queues)):
+                if queues[i]:
+                    current_queue_level = i
                     break
             
-            if not current_process:
-                next_arrivals = [wp.arrival_time for wp in working_processes 
-                               if wp.arrival_time > current_time and wp.remaining_time > 0]
-                if not next_arrivals:
+            if current_queue_level is None:
+                if process_index < len(processes):
+                    next_arrival = processes[process_index].arrival_time
+                    schedule.append(ScheduleEntry(
+                        process_id=0,
+                        start_time=current_time,
+                        end_time=next_arrival,
+                        type="idle"
+                    ))
+                    current_time = next_arrival
+                    continue
+                else:
                     break
-                
-                next_time = min(next_arrivals)
-                if current_time < next_time:
-                    gantt_chart.append({
-                        "process": "IDLE",
-                        "start": current_time,
-                        "end": next_time
-                    })
-                current_time = next_time
+            
+            current_process = queues[current_queue_level].pop(0)
+            
+            if remaining_times[current_process.pid] <= 0:
                 continue
             
-            if gantt_chart and context_switch_cost > 0:
-                last_entry = gantt_chart[-1]
-                if (last_entry["process"] not in ["IDLE", "CONTEXT_SWITCH", "PRIORITY_BOOST"] and 
-                    last_entry["process"] != f"P{current_process.pid}"):
-                    gantt_chart.append({
-                        "process": "CONTEXT_SWITCH",
-                        "start": current_time,
-                        "end": current_time + context_switch_cost
-                    })
-                    current_time += context_switch_cost
+            time_quantum = mlfq_config.time_quantums[min(current_queue_level, len(mlfq_config.time_quantums) - 1)]
             
-            if current_process.first_run:
-                process_response_times[current_process.pid] = current_time - current_process.arrival_time
-                process_start_times[current_process.pid] = current_time
-                current_process.first_run = False
+            execution_time = min(time_quantum, remaining_times[current_process.pid])
+            start_time = current_time
+            end_time = current_time + execution_time
             
-            time_quantum = mlfq_config.time_quantums[current_queue_idx]
-            execution_time = min(time_quantum, current_process.remaining_time)
+            schedule.append(ScheduleEntry(
+                process_id=current_process.pid,
+                start_time=start_time,
+                end_time=end_time,
+                type="execution",
+                queue_level=current_queue_level
+            ))
             
-            if current_queue_idx == mlfq_config.num_queues - 1:
-                execution_time = current_process.remaining_time
+            remaining_times[current_process.pid] -= execution_time
+            current_time = end_time
             
-            gantt_chart.append({
-                "process": f"P{current_process.pid}",
-                "start": current_time,
-                "end": current_time + execution_time,
-                "queue": current_queue_idx,
-                "quantum_used": execution_time
-            })
+            while process_index < len(processes) and processes[process_index].arrival_time <= current_time:
+                if remaining_times[processes[process_index].pid] > 0:
+                    queues[0].append(processes[process_index])
+                    process_queue_level[processes[process_index].pid] = 0
+                process_index += 1
             
-            current_process.remaining_time -= execution_time
-            current_process.time_in_queue += execution_time
-            current_time += execution_time
-            
-            for wp in working_processes:
-                if (wp.arrival_time <= current_time and 
-                    wp.remaining_time > 0 and 
-                    wp not in [p for queue in queues for p in queue] and
-                    wp != current_process):
-                    queues[0].append(wp)
-                    process_wait_start[wp.pid] = current_time
-            
-            if current_process.remaining_time <= 0:
+            if remaining_times[current_process.pid] > 0:
+                next_queue_level = min(current_queue_level + 1, len(queues) - 1)
+                queues[next_queue_level].append(current_process)
+                process_queue_level[current_process.pid] = next_queue_level
+            else:
                 completion_time = current_time
+                waiting_time = completion_time - current_process.arrival_time - current_process.burst_time
                 turnaround_time = completion_time - current_process.arrival_time
-                waiting_time = turnaround_time - current_process.burst_time
-                response_time = process_response_times[current_process.pid]
                 
-                result = ProcessResult(
+                results.append(ProcessResult(
                     pid=current_process.pid,
                     arrival_time=current_process.arrival_time,
                     burst_time=current_process.burst_time,
-                    start_time=process_start_times[current_process.pid],
-                    completion_time=completion_time,
-                    turnaround_time=turnaround_time,
                     waiting_time=waiting_time,
-                    response_time=response_time
-                )
-                completed_processes.append(result)
-                
-                if current_process.pid in process_wait_start:
-                    del process_wait_start[current_process.pid]
-            else:
-                if (current_queue_idx < mlfq_config.num_queues - 1 and 
-                    current_process.time_in_queue >= mlfq_config.time_quantums[current_queue_idx]):
-                    current_process.current_queue = current_queue_idx + 1
-                    current_process.time_in_queue = 0
-                    queues[current_process.current_queue].append(current_process)
-                else:
-                    queues[current_queue_idx].append(current_process)
-                
-                process_wait_start[current_process.pid] = current_time
-        
-        completed_processes.sort(key=lambda x: x.pid)
-        
-        total_processes = len(completed_processes)
-        avg_waiting_time = sum(r.waiting_time for r in completed_processes) / total_processes
-        avg_turnaround_time = sum(r.turnaround_time for r in completed_processes) / total_processes
-        avg_response_time = sum(r.response_time for r in completed_processes) / total_processes
-        
-        total_time = max(r.completion_time for r in completed_processes)
-        total_burst_time = sum(p.burst_time for p in processes)
-        cpu_utilization = (total_burst_time / total_time) * 100 if total_time > 0 else 0
-        throughput = total_processes / total_time if total_time > 0 else 0
-        
-        return CPUScheduleResponse(
-            algorithm=f"MLFQ ({mlfq_config.num_queues} queues, TQ={mlfq_config.time_quantums})",
-            total_processes=total_processes,
-            total_time=total_time,
-            avg_waiting_time=round(avg_waiting_time, 2),
-            avg_turnaround_time=round(avg_turnaround_time, 2),
-            avg_response_time=round(avg_response_time, 2),
-            cpu_utilization=round(cpu_utilization, 2),
-            throughput=round(throughput, 4),
-            processes=completed_processes,
-            gantt_chart=gantt_chart
-        )
-
-    @staticmethod
-    def _priority_non_preemptive(processes: List[Process], context_switch_cost: float = 0) -> CPUScheduleResponse:
-        """
-        Non-preemptive Priority Scheduling
-        """
-        remaining_processes = processes.copy()
-        completed_processes = []
-        gantt_chart = []
-        current_time = 0.0
-        
-        while remaining_processes:
-            available_processes = [p for p in remaining_processes if p.arrival_time <= current_time]
-            
-            if not available_processes:
-                next_arrival = min(p.arrival_time for p in remaining_processes)
-                if current_time > 0:
-                    gantt_chart.append({
-                        "process": "IDLE",
-                        "start": current_time,
-                        "end": next_arrival
-                    })
-                current_time = float(next_arrival)
-                continue
-            
-            selected_process = min(available_processes, key=lambda p: (p.priority, p.arrival_time, p.pid))
-            
-            if completed_processes and context_switch_cost > 0:
-                current_time += context_switch_cost
-                gantt_chart.append({
-                    "process": "CONTEXT_SWITCH",
-                    "start": current_time - context_switch_cost,
-                    "end": current_time
-                })
-            
-            start_time = current_time
-            completion_time = current_time + selected_process.burst_time
-            turnaround_time = completion_time - selected_process.arrival_time
-            waiting_time = start_time - selected_process.arrival_time
-            response_time = waiting_time
-            
-            gantt_chart.append({
-                "process": f"P{selected_process.pid}",
-                "start": start_time,
-                "end": completion_time,
-                "priority": selected_process.priority
-            })
-            
-            result = ProcessResult(
-                pid=selected_process.pid,
-                arrival_time=selected_process.arrival_time,
-                burst_time=selected_process.burst_time,
-                start_time=start_time,
-                completion_time=completion_time,
-                turnaround_time=turnaround_time,
-                waiting_time=waiting_time,
-                response_time=response_time
-            )
-            completed_processes.append(result)
-            
-            remaining_processes.remove(selected_process)
-            current_time = completion_time
-        
-        total_processes = len(completed_processes)
-        avg_waiting_time = sum(r.waiting_time for r in completed_processes) / total_processes
-        avg_turnaround_time = sum(r.turnaround_time for r in completed_processes) / total_processes
-        avg_response_time = sum(r.response_time for r in completed_processes) / total_processes
-        
-        total_time = max(r.completion_time for r in completed_processes)
-        total_burst_time = sum(p.burst_time for p in processes)
-        cpu_utilization = (total_burst_time / total_time) * 100 if total_time > 0 else 0
-        throughput = total_processes / total_time if total_time > 0 else 0
-        
-        return CPUScheduleResponse(
-            algorithm="Priority (Non-Preemptive)",
-            total_processes=total_processes,
-            total_time=total_time,
-            avg_waiting_time=round(avg_waiting_time, 2),
-            avg_turnaround_time=round(avg_turnaround_time, 2),
-            avg_response_time=round(avg_response_time, 2),
-            cpu_utilization=round(cpu_utilization, 2),
-            throughput=round(throughput, 4),
-            processes=completed_processes,
-            gantt_chart=gantt_chart
-        )
-    
-    @staticmethod
-    def _priority_preemptive(processes: List[Process], context_switch_cost: float = 0) -> CPUScheduleResponse:
-        """
-        Preemptive Priority Scheduling
-        """
-        working_processes = []
-        for process in processes:
-            working_process = Process(
-                pid=process.pid,
-                arrival_time=process.arrival_time,
-                burst_time=process.burst_time,
-                priority=process.priority,
-                remaining_time=float(process.burst_time)
-            )
-            working_processes.append(working_process)
-        
-        completed_processes = []
-        gantt_chart = []
-        current_time = 0.0
-        current_process = None
-        process_start_times = {}
-        process_response_times = {}
-        
-        max_time = sum(p.burst_time for p in processes) + max(p.arrival_time for p in processes) + len(processes) * context_switch_cost
-        
-        while current_time < max_time and len(completed_processes) < len(processes):
-            available_processes = [p for p in working_processes if p.arrival_time <= current_time and p.remaining_time > 0]
-            
-            if not available_processes:
-                next_arrivals = [p.arrival_time for p in working_processes if p.arrival_time > current_time and p.remaining_time > 0]
-                if not next_arrivals:
-                    break
-                
-                next_time = min(next_arrivals)
-                if current_time < next_time:
-                    gantt_chart.append({
-                        "process": "IDLE",
-                        "start": current_time,
-                        "end": next_time
-                    })
-                current_time = next_time
-                continue
-            
-            selected_process = min(available_processes, key=lambda p: (p.priority, p.arrival_time, p.pid))
-            
-            if current_process and current_process.pid != selected_process.pid:
-                if context_switch_cost > 0:
-                    gantt_chart.append({
-                        "process": "CONTEXT_SWITCH",
-                        "start": current_time,
-                        "end": current_time + context_switch_cost
-                    })
-                    current_time += context_switch_cost
-            
-            if selected_process.pid not in process_response_times:
-                process_response_times[selected_process.pid] = current_time - selected_process.arrival_time
-                process_start_times[selected_process.pid] = current_time
-            
-            time_to_completion = selected_process.remaining_time
-            
-            next_preemption_time = float('inf')
-            for p in working_processes:
-                if (p.arrival_time > current_time and 
-                    p.arrival_time < current_time + time_to_completion and 
-                    p.priority < selected_process.priority):
-                    next_preemption_time = min(next_preemption_time, p.arrival_time)
-            
-            execution_time = min(time_to_completion, next_preemption_time - current_time if next_preemption_time != float('inf') else time_to_completion)
-            execution_time = max(0.1, execution_time)
-            
-            gantt_chart.append({
-                "process": f"P{selected_process.pid}",
-                "start": current_time,
-                "end": current_time + execution_time,
-                "priority": selected_process.priority
-            })
-            
-            selected_process.remaining_time -= execution_time
-            current_time += execution_time
-            current_process = selected_process
-            
-            if selected_process.remaining_time <= 0:
-                completion_time = current_time
-                turnaround_time = completion_time - selected_process.arrival_time
-                waiting_time = turnaround_time - selected_process.burst_time
-                response_time = process_response_times[selected_process.pid]
-                
-                result = ProcessResult(
-                    pid=selected_process.pid,
-                    arrival_time=selected_process.arrival_time,
-                    burst_time=selected_process.burst_time,
-                    start_time=process_start_times[selected_process.pid],
-                    completion_time=completion_time,
                     turnaround_time=turnaround_time,
-                    waiting_time=waiting_time,
-                    response_time=response_time
-                )
-                completed_processes.append(result)
-                current_process = None
-        
-        completed_processes.sort(key=lambda x: x.pid)
-        
-        total_processes = len(completed_processes)
-        avg_waiting_time = sum(r.waiting_time for r in completed_processes) / total_processes
-        avg_turnaround_time = sum(r.turnaround_time for r in completed_processes) / total_processes
-        avg_response_time = sum(r.response_time for r in completed_processes) / total_processes
-        
-        total_time = max(r.completion_time for r in completed_processes)
-        total_burst_time = sum(p.burst_time for p in processes)
-        cpu_utilization = (total_burst_time / total_time) * 100 if total_time > 0 else 0
-        throughput = total_processes / total_time if total_time > 0 else 0
-        
-        return CPUScheduleResponse(
-            algorithm="Priority (Preemptive)",
-            total_processes=total_processes,
-            total_time=total_time,
-            avg_waiting_time=round(avg_waiting_time, 2),
-            avg_turnaround_time=round(avg_turnaround_time, 2),
-            avg_response_time=round(avg_response_time, 2),
-            cpu_utilization=round(cpu_utilization, 2),
-            throughput=round(throughput, 4),
-            processes=completed_processes,
-            gantt_chart=gantt_chart
-        )
-
-    @staticmethod
-    def _sjf_non_preemptive(processes: List[Process], context_switch_cost: float = 0) -> CPUScheduleResponse:
-        """
-        Non-preemptive SJF Scheduling
-        """
-        remaining_processes = processes.copy()
-        completed_processes = []
-        gantt_chart = []
-        current_time = 0.0
-        
-        while remaining_processes:
-            available_processes = [p for p in remaining_processes if p.arrival_time <= current_time]
-            
-            if not available_processes:
-                next_arrival = min(p.arrival_time for p in remaining_processes)
-                if current_time > 0:
-                    gantt_chart.append({
-                        "process": "IDLE",
-                        "start": current_time,
-                        "end": next_arrival
-                    })
-                current_time = float(next_arrival)
-                continue
-            
-            selected_process = min(available_processes, key=lambda p: (p.burst_time, p.arrival_time, p.pid))
-            
-            if completed_processes and context_switch_cost > 0:
-                current_time += context_switch_cost
-                gantt_chart.append({
-                    "process": "CONTEXT_SWITCH",
-                    "start": current_time - context_switch_cost,
-                    "end": current_time
-                })
-            
-            start_time = current_time
-            completion_time = current_time + selected_process.burst_time
-            turnaround_time = completion_time - selected_process.arrival_time
-            waiting_time = start_time - selected_process.arrival_time
-            response_time = waiting_time
-            
-            gantt_chart.append({
-                "process": f"P{selected_process.pid}",
-                "start": start_time,
-                "end": completion_time
-            })
-            
-            result = ProcessResult(
-                pid=selected_process.pid,
-                arrival_time=selected_process.arrival_time,
-                burst_time=selected_process.burst_time,
-                start_time=start_time,
-                completion_time=completion_time,
-                turnaround_time=turnaround_time,
-                waiting_time=waiting_time,
-                response_time=response_time
-            )
-            completed_processes.append(result)
-            
-            remaining_processes.remove(selected_process)
-            current_time = completion_time
-        
-        total_processes = len(completed_processes)
-        avg_waiting_time = sum(r.waiting_time for r in completed_processes) / total_processes
-        avg_turnaround_time = sum(r.turnaround_time for r in completed_processes) / total_processes
-        avg_response_time = sum(r.response_time for r in completed_processes) / total_processes
-        
-        total_time = max(r.completion_time for r in completed_processes)
-        total_burst_time = sum(p.burst_time for p in processes)
-        cpu_utilization = (total_burst_time / total_time) * 100 if total_time > 0 else 0
-        throughput = total_processes / total_time if total_time > 0 else 0
-        
-        return CPUScheduleResponse(
-            algorithm="SJF (Non-Preemptive)",
-            total_processes=total_processes,
-            total_time=total_time,
-            avg_waiting_time=round(avg_waiting_time, 2),
-            avg_turnaround_time=round(avg_turnaround_time, 2),
-            avg_response_time=round(avg_response_time, 2),
-            cpu_utilization=round(cpu_utilization, 2),
-            throughput=round(throughput, 4),
-            processes=completed_processes,
-            gantt_chart=gantt_chart
-        )
-    
-    @staticmethod
-    def _sjf_preemptive(processes: List[Process], context_switch_cost: float = 0) -> CPUScheduleResponse:
-        """
-        Preemptive SJF (SRTF - Shortest Remaining Time First) Scheduling
-        """
-        working_processes = []
-        for process in processes:
-            working_process = Process(
-                pid=process.pid,
-                arrival_time=process.arrival_time,
-                burst_time=process.burst_time,
-                priority=process.priority,
-                remaining_time=float(process.burst_time)
-            )
-            working_processes.append(working_process)
-        
-        completed_processes = []
-        gantt_chart = []
-        current_time = 0.0
-        current_process = None
-        process_start_times = {}
-        process_response_times = {}
-        
-        max_time = sum(p.burst_time for p in processes) + max(p.arrival_time for p in processes) + len(processes) * context_switch_cost
-        
-        while current_time < max_time and len(completed_processes) < len(processes):
-            available_processes = [p for p in working_processes if p.arrival_time <= current_time and p.remaining_time > 0]
-            
-            if not available_processes:
-                next_arrivals = [p.arrival_time for p in working_processes if p.arrival_time > current_time and p.remaining_time > 0]
-                if not next_arrivals:
-                    break
-                
-                next_time = min(next_arrivals)
-                if current_time < next_time:
-                    gantt_chart.append({
-                        "process": "IDLE",
-                        "start": current_time,
-                        "end": next_time
-                    })
-                current_time = next_time
-                continue
-            
-            selected_process = min(available_processes, key=lambda p: (p.remaining_time, p.arrival_time, p.pid))
-            
-            if current_process and current_process.pid != selected_process.pid:
-                if context_switch_cost > 0:
-                    gantt_chart.append({
-                        "process": "CONTEXT_SWITCH",
-                        "start": current_time,
-                        "end": current_time + context_switch_cost
-                    })
-                    current_time += context_switch_cost
-            
-            if selected_process.pid not in process_response_times:
-                process_response_times[selected_process.pid] = current_time - selected_process.arrival_time
-                process_start_times[selected_process.pid] = current_time
-            
-            time_to_completion = selected_process.remaining_time
-            
-            next_preemption_time = float('inf')
-            for p in working_processes:
-                if (p.arrival_time > current_time and 
-                    p.arrival_time < current_time + time_to_completion and 
-                    p.burst_time < selected_process.remaining_time):
-                    next_preemption_time = min(next_preemption_time, p.arrival_time)
-            
-            execution_time = min(time_to_completion, next_preemption_time - current_time if next_preemption_time != float('inf') else time_to_completion)
-            execution_time = max(0.1, execution_time)
-            
-            gantt_chart.append({
-                "process": f"P{selected_process.pid}",
-                "start": current_time,
-                "end": current_time + execution_time
-            })
-            
-            selected_process.remaining_time -= execution_time
-            current_time += execution_time
-            current_process = selected_process
-            
-            if selected_process.remaining_time <= 0:
-                completion_time = current_time
-                turnaround_time = completion_time - selected_process.arrival_time
-                waiting_time = turnaround_time - selected_process.burst_time
-                response_time = process_response_times[selected_process.pid]
-                
-                result = ProcessResult(
-                    pid=selected_process.pid,
-                    arrival_time=selected_process.arrival_time,
-                    burst_time=selected_process.burst_time,
-                    start_time=process_start_times[selected_process.pid],
                     completion_time=completion_time,
-                    turnaround_time=turnaround_time,
-                    waiting_time=waiting_time,
-                    response_time=response_time
-                )
-                completed_processes.append(result)
-                current_process = None
+                    priority=current_process.priority
+                ))
         
-        completed_processes.sort(key=lambda x: x.pid)
-        
-        total_processes = len(completed_processes)
-        avg_waiting_time = sum(r.waiting_time for r in completed_processes) / total_processes
-        avg_turnaround_time = sum(r.turnaround_time for r in completed_processes) / total_processes
-        avg_response_time = sum(r.response_time for r in completed_processes) / total_processes
-        
-        total_time = max(r.completion_time for r in completed_processes)
+        total_waiting_time = sum(p.waiting_time for p in results)
+        total_turnaround_time = sum(p.turnaround_time for p in results)
         total_burst_time = sum(p.burst_time for p in processes)
-        cpu_utilization = (total_burst_time / total_time) * 100 if total_time > 0 else 0
-        throughput = total_processes / total_time if total_time > 0 else 0
         
-        return CPUScheduleResponse(
-            algorithm="SJF (Preemptive/SRTF)",
-            total_processes=total_processes,
-            total_time=total_time,
-            avg_waiting_time=round(avg_waiting_time, 2),
-            avg_turnaround_time=round(avg_turnaround_time, 2),
-            avg_response_time=round(avg_response_time, 2),
-            cpu_utilization=round(cpu_utilization, 2),
-            throughput=round(throughput, 4),
-            processes=completed_processes,
-            gantt_chart=gantt_chart
+        metrics = SchedulingMetrics(
+            average_waiting_time=total_waiting_time / len(results) if results else 0,
+            average_turnaround_time=total_turnaround_time / len(results) if results else 0,
+            cpu_utilization=(total_burst_time / current_time) * 100 if current_time > 0 else 0,
+            throughput=len(results) / current_time if current_time > 0 else 0
+        )
+        
+        return SchedulingResult(
+            processes=results,
+            schedule=schedule,
+            metrics=metrics
         )
