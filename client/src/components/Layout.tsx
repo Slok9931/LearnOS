@@ -1,26 +1,33 @@
 import React, { ReactNode } from 'react'
 import { AppBar, Toolbar, Typography, Container, Box, Tabs, Tab, IconButton, Tooltip } from '@mui/material'
-import { Computer, Memory, Storage, GitHub, Description } from '@mui/icons-material'
+import { Cpu, HardDrive, MemoryStick, Home, Github, Monitor } from 'lucide-react'
 import { Link, useLocation, Outlet } from 'react-router-dom'
+import { cn } from '@/lib/utils'
 
 const navigationItems = [
     {
-        label: 'CPU Scheduling',
+        label: 'Home',
         path: '/',
-        icon: <Computer />,
+        icon: Home,
+        description: 'Simulate various CPU scheduling algorithms'
+    },
+    {
+        label: 'CPU Scheduling',
+        path: '/cpu-scheduling',
+        icon: Cpu,
         description: 'Simulate various CPU scheduling algorithms'
     },
     {
         label: 'Memory Management',
-        path: '/memory',
-        icon: <Memory />,
+        path: '/memory-management',
+        icon: MemoryStick,
         description: 'Coming Soon: Memory allocation algorithms',
         disabled: true
     },
     {
         label: 'Disk Scheduling',
-        path: '/disk',
-        icon: <Storage />,
+        path: '/disk-scheduling',
+        icon: HardDrive,
         description: 'Coming Soon: Disk scheduling algorithms',
         disabled: true
     }
@@ -38,102 +45,82 @@ export default function Layout( { children }: LayoutProps ) {
     )
 
     return (
-        <Box sx={{ minHeight: '100vh', bgcolor: 'hsl(var(--background))' }}>
-            {/* Header */}
-            <AppBar
-                position="sticky"
-                elevation={0}
-                sx={{
-                    bgcolor: 'hsl(var(--background))',
-                    borderBottom: '1px solid hsl(var(--border))',
-                    backdropFilter: 'blur(10px)'
-                }}
-            >
-                <Toolbar>
-                    <Box sx={{ display: 'flex', alignItems: 'center', flexGrow: 1 }}>
-                        <Computer sx={{ mr: 2, color: 'hsl(var(--primary))' }} />
-                        <Typography
-                            variant="h6"
-                            component="div"
-                            sx={{
-                                fontWeight: 700,
-                                background: 'var(--gradient-primary)',
-                                WebkitBackgroundClip: 'text',
-                                WebkitTextFillColor: 'transparent',
-                                backgroundClip: 'text'
-                            }}
+        <div className="min-h-screen bg-background">
+            {/* Navigation */}
+            <nav className="bg-card border-b border-border shadow-sm">
+                <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+                    <div className="flex h-16 justify-between items-center">
+                        <div className="flex items-center space-x-4">
+                            <Link to="/" className="flex items-center space-x-2">
+                                <Monitor className="h-8 w-8 text-primary" />
+                                <span className="text-xl font-bold text-foreground">LearnOS</span>
+                            </Link>
+                        </div>
+                        
+                        <div className="hidden md:block">
+                            <div className="flex items-center space-x-1">
+                                {navigationItems.map((item) => {
+                                    const Icon = item.icon;
+                                    return (
+                                        <Link
+                                            key={item.label}
+                                            to={item.path}
+                                            className={cn(
+                                                'flex items-center space-x-2 px-3 py-2 rounded-md text-sm font-medium transition-colors',
+                                                location.pathname === item.path
+                                                  ? 'bg-primary text-primary-foreground'
+                                                  : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+                                            )}
+                                        >
+                                            <Icon className="h-4 w-4" />
+                                            <span>{item.label}</span>
+                                        </Link>
+                                    );
+                                })}
+                            </div>
+                        </div>
+
+                        <a
+                          href="https://github.com"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-muted-foreground hover:text-foreground"
                         >
-                            OS Simulator
-                        </Typography>
-                    </Box>
+                          <Github className="h-5 w-5" />
+                        </a>
+                    </div>
+                </div>
 
-                    {/* Navigation Tabs */}
-                    <Tabs
-                        value={currentTabIndex === -1 ? 0 : currentTabIndex}
-                        sx={{
-                            '& .MuiTab-root': {
-                                color: 'hsl(var(--muted-foreground))',
-                                textTransform: 'none',
-                                minHeight: 48,
-                                '&.Mui-selected': {
-                                    color: 'hsl(var(--primary))',
-                                }
-                            },
-                            '& .MuiTabs-indicator': {
-                                backgroundColor: 'hsl(var(--primary))',
-                            }
-                        }}
-                    >
-                        {navigationItems.map((item, index) => (
-                            <Tab
-                                key={item.path}
-                                component={Link}
-                                to={item.path}
-                                label={item.label}
-                                icon={item.icon}
-                                iconPosition="start"
-                                disabled={item.disabled}
-                                sx={{
-                                    mx: 1,
-                                    opacity: item.disabled ? 0.5 : 1,
-                                    transition: 'var(--transition-smooth)'
-                                }}
-                            />
-                        ))}
-                    </Tabs>
+                {/* Mobile navigation */}
+                <div className="md:hidden border-t border-border">
+                  <div className="px-2 pt-2 pb-3 space-y-1">
+                    {navigationItems.map((item) => {
+                      const Icon = item.icon;
+                      return (
+                        <Link
+                          key={item.label}
+                          to={item.path}
+                          className={cn(
+                            'flex items-center space-x-2 px-3 py-2 rounded-md text-sm font-medium transition-colors',
+                            location.pathname === item.path
+                              ? 'bg-primary text-primary-foreground'
+                              : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+                          )}
+                        >
+                          <Icon className="h-4 w-4" />
+                          <span>{item.label}</span>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                </div>
+            </nav>
 
-                    <Box sx={{ ml: 2 }}>
-                        <Tooltip title="View Documentation">
-                            <IconButton
-                                href="#"
-                                sx={{
-                                    color: 'hsl(var(--muted-foreground))',
-                                    '&:hover': { color: 'hsl(var(--primary))' }
-                                }}
-                            >
-                                <Description />
-                            </IconButton>
-                        </Tooltip>
-                        <Tooltip title="View Source Code">
-                            <IconButton
-                                href="#"
-                                sx={{
-                                    color: 'hsl(var(--muted-foreground))',
-                                    '&:hover': { color: 'hsl(var(--primary))' }
-                                }}
-                            >
-                                <GitHub />
-                            </IconButton>
-                        </Tooltip>
-                    </Box>
-                </Toolbar>
-            </AppBar>
-
-            {/* Main Content */}
-            <Container maxWidth="xl" sx={{ py: 4 }}>
-                {children}
-                <Outlet />
-            </Container>
-        </Box>
+            {/* Main content */}
+            <main className="min-h-[calc(100vh-4rem)]">
+              {children}
+              <Outlet />
+            </main>
+        </div>
     )
 }

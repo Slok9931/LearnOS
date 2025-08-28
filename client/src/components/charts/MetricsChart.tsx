@@ -16,9 +16,9 @@ export const MetricsChart: React.FC<MetricsChartProps> = ({
 }) => {
     if (!processes || processes.length === 0 || !metrics) {
         return (
-            <Card>
+            <Card className="bg-card border-border">
                 <CardHeader>
-                    <CardTitle>{title}</CardTitle>
+                    <CardTitle className="text-foreground">{title}</CardTitle>
                 </CardHeader>
                 <CardContent>
                     <div className="text-center text-muted-foreground py-8">
@@ -44,42 +44,51 @@ export const MetricsChart: React.FC<MetricsChartProps> = ({
     const maxValue = Math.max(maxWaitingTime, maxTurnaroundTime, maxBurstTime, 1) // Ensure minimum of 1
 
     const getBarHeight = (value: number): number => {
-        return maxValue > 0 ? Math.max((value / maxValue) * 100, 1) : 0 // Minimum height of 1%
+        return maxValue > 0 ? Math.max((value / maxValue) * 100, 2) : 0 // Minimum height of 2%
     }
+
+    // Generate Y-axis scale values
+    const yAxisValues = [
+        maxValue,
+        maxValue * 0.75,
+        maxValue * 0.5,
+        maxValue * 0.25,
+        0
+    ]
 
     return (
         <div className="space-y-6">
             {/* Summary Metrics */}
-            <Card>
+            <Card className="bg-card border-border">
                 <CardHeader>
-                    <CardTitle>{title} - Summary</CardTitle>
+                    <CardTitle className="text-foreground">{title} - Summary</CardTitle>
                 </CardHeader>
                 <CardContent>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <div className="text-center p-4 bg-blue-50 rounded-lg">
-                            <div className="text-2xl font-bold text-blue-600">
+                        <div className="text-center p-4 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+                            <div className="text-2xl font-bold text-blue-400">
                                 {(metrics.average_waiting_time || 0).toFixed(2)}
                             </div>
-                            <div className="text-sm text-blue-800">Avg Waiting Time</div>
+                            <div className="text-sm text-blue-300">Avg Waiting Time</div>
                         </div>
-                        <div className="text-center p-4 bg-green-50 rounded-lg">
-                            <div className="text-2xl font-bold text-green-600">
+                        <div className="text-center p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-lg">
+                            <div className="text-2xl font-bold text-emerald-400">
                                 {(metrics.average_turnaround_time || 0).toFixed(2)}
                             </div>
-                            <div className="text-sm text-green-800">Avg Turnaround Time</div>
+                            <div className="text-sm text-emerald-300">Avg Turnaround Time</div>
                         </div>
-                        <div className="text-center p-4 bg-purple-50 rounded-lg">
-                            <div className="text-2xl font-bold text-purple-600">
+                        <div className="text-center p-4 bg-purple-500/10 border border-purple-500/20 rounded-lg">
+                            <div className="text-2xl font-bold text-purple-400">
                                 {(metrics.cpu_utilization || 0).toFixed(1)}%
                             </div>
-                            <div className="text-sm text-purple-800">CPU Utilization</div>
+                            <div className="text-sm text-purple-300">CPU Utilization</div>
                         </div>
                         {metrics.throughput !== undefined && (
-                            <div className="text-center p-4 bg-orange-50 rounded-lg">
-                                <div className="text-2xl font-bold text-orange-600">
+                            <div className="text-center p-4 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+                                <div className="text-2xl font-bold text-amber-400">
                                     {metrics.throughput.toFixed(2)}
                                 </div>
-                                <div className="text-sm text-orange-800">Throughput</div>
+                                <div className="text-sm text-amber-300">Throughput</div>
                             </div>
                         )}
                     </div>
@@ -87,84 +96,136 @@ export const MetricsChart: React.FC<MetricsChartProps> = ({
             </Card>
 
             {/* Bar Chart */}
-            <Card>
+            <Card className="bg-card border-border">
                 <CardHeader>
-                    <CardTitle>Process Comparison</CardTitle>
+                    <CardTitle className="text-foreground">Process Comparison Chart</CardTitle>
                 </CardHeader>
                 <CardContent>
                     <div className="space-y-6">
-                        {/* Chart */}
-                        <div className="relative">
-                            <div className="flex items-end justify-center gap-8 h-64 pb-8">
+                        {/* Chart Container */}
+                        <div className="relative overflow-x-auto">
+                            <div 
+                                className="flex items-end justify-center gap-4 sm:gap-6 md:gap-8 h-80 pb-12 px-4"
+                                style={{ minWidth: `${chartData.length * 120}px` }}
+                            >
+                                {/* Y-axis grid lines and labels */}
+                                <div className="absolute left-0 top-0 bottom-12 w-full">
+                                    {yAxisValues.map((value, index) => (
+                                        <div
+                                            key={index}
+                                            className="absolute w-full border-t border-border/30"
+                                            style={{ 
+                                                bottom: `${12 + (index / (yAxisValues.length - 1)) * (320 - 48)}px` 
+                                            }}
+                                        >
+                                            <span className="absolute -left-12 -top-2 text-xs text-muted-foreground">
+                                                {value.toFixed(1)}
+                                            </span>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                {/* Process bars */}
                                 {chartData.map((data, index) => (
-                                    <div key={data.process_id} className="flex flex-col items-center gap-2">
-                                        <div className="flex items-end gap-1 h-48">
+                                    <div key={data.process_id} className="flex flex-col items-center gap-3 relative z-10">
+                                        <div className="flex items-end gap-1 h-64">
                                             {/* Waiting Time Bar */}
-                                            <div className="flex flex-col items-center">
-                                                <div
-                                                    className="w-6 bg-blue-500 rounded-t min-h-[2px]"
-                                                    style={{ height: `${getBarHeight(data.waiting_time)}%` }}
-                                                    title={`Waiting Time: ${data.waiting_time.toFixed(2)}`}
-                                                ></div>
-                                                <div className="text-xs text-blue-600 mt-1">
+                                            <div className="flex flex-col items-center group">
+                                                <div className="relative">
+                                                    <div
+                                                        className="w-5 sm:w-6 bg-blue-500 hover:bg-blue-400 rounded-t transition-colors duration-200 cursor-pointer"
+                                                        style={{ 
+                                                            height: `${Math.max(getBarHeight(data.waiting_time), 8)}px`,
+                                                            minHeight: '4px'
+                                                        }}
+                                                    />
+                                                    {/* Tooltip */}
+                                                    <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-background border border-border rounded text-xs text-foreground opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-20">
+                                                        WT: {data.waiting_time.toFixed(2)}
+                                                    </div>
+                                                </div>
+                                                <div className="text-xs text-blue-400 mt-1 font-medium">
                                                     WT
                                                 </div>
                                             </div>
 
                                             {/* Turnaround Time Bar */}
-                                            <div className="flex flex-col items-center">
-                                                <div
-                                                    className="w-6 bg-green-500 rounded-t min-h-[2px]"
-                                                    style={{ height: `${getBarHeight(data.turnaround_time)}%` }}
-                                                    title={`Turnaround Time: ${data.turnaround_time.toFixed(2)}`}
-                                                ></div>
-                                                <div className="text-xs text-green-600 mt-1">
+                                            <div className="flex flex-col items-center group">
+                                                <div className="relative">
+                                                    <div
+                                                        className="w-5 sm:w-6 bg-emerald-500 hover:bg-emerald-400 rounded-t transition-colors duration-200 cursor-pointer"
+                                                        style={{ 
+                                                            height: `${Math.max(getBarHeight(data.turnaround_time), 8)}px`,
+                                                            minHeight: '4px'
+                                                        }}
+                                                    />
+                                                    {/* Tooltip */}
+                                                    <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-background border border-border rounded text-xs text-foreground opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-20">
+                                                        TT: {data.turnaround_time.toFixed(2)}
+                                                    </div>
+                                                </div>
+                                                <div className="text-xs text-emerald-400 mt-1 font-medium">
                                                     TT
                                                 </div>
                                             </div>
 
                                             {/* Burst Time Bar */}
-                                            <div className="flex flex-col items-center">
-                                                <div
-                                                    className="w-6 bg-purple-500 rounded-t min-h-[2px]"
-                                                    style={{ height: `${getBarHeight(data.burst_time)}%` }}
-                                                    title={`Burst Time: ${data.burst_time.toFixed(2)}`}
-                                                ></div>
-                                                <div className="text-xs text-purple-600 mt-1">
+                                            <div className="flex flex-col items-center group">
+                                                <div className="relative">
+                                                    <div
+                                                        className="w-5 sm:w-6 bg-purple-500 hover:bg-purple-400 rounded-t transition-colors duration-200 cursor-pointer"
+                                                        style={{ 
+                                                            height: `${Math.max(getBarHeight(data.burst_time), 8)}px`,
+                                                            minHeight: '4px'
+                                                        }}
+                                                    />
+                                                    {/* Tooltip */}
+                                                    <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-background border border-border rounded text-xs text-foreground opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-20">
+                                                        BT: {data.burst_time.toFixed(2)}
+                                                    </div>
+                                                </div>
+                                                <div className="text-xs text-purple-400 mt-1 font-medium">
                                                     BT
                                                 </div>
                                             </div>
                                         </div>
 
                                         {/* Process Label */}
-                                        <Badge variant="outline">P{data.process_id}</Badge>
+                                        <Badge variant="outline" className="border-border text-foreground bg-muted/50">
+                                            P{data.process_id}
+                                        </Badge>
+
+                                        {/* Values display */}
+                                        <div className="text-xs text-muted-foreground text-center space-y-1">
+                                            <div>WT: {data.waiting_time.toFixed(1)}</div>
+                                            <div>TT: {data.turnaround_time.toFixed(1)}</div>
+                                            <div>BT: {data.burst_time.toFixed(1)}</div>
+                                        </div>
                                     </div>
                                 ))}
                             </div>
-
-                            {/* Y-axis labels */}
-                            <div className="absolute left-0 top-0 bottom-8 flex flex-col justify-between text-xs text-muted-foreground">
-                                <span>{maxValue.toFixed(1)}</span>
-                                <span>{(maxValue * 0.75).toFixed(1)}</span>
-                                <span>{(maxValue * 0.5).toFixed(1)}</span>
-                                <span>{(maxValue * 0.25).toFixed(1)}</span>
-                                <span>0</span>
-                            </div>
                         </div>
 
+                        {/* Scroll hint for mobile */}
+                        {chartData.length > 4 && (
+                            <div className="text-xs text-muted-foreground text-center py-2 border border-border/50 rounded bg-muted/20 sm:hidden">
+                                💡 Scroll horizontally to view all processes
+                            </div>
+                        )}
+
                         {/* Legend */}
-                        <div className="flex justify-center gap-6">
+                        <div className="flex flex-wrap justify-center gap-4 sm:gap-6 pt-4 border-t border-border">
                             <div className="flex items-center gap-2">
-                                <div className="w-4 h-4 bg-blue-500 rounded"></div>
-                                <span className="text-sm">Waiting Time (WT)</span>
+                                <div className="w-4 h-4 bg-blue-500 rounded shadow-sm"></div>
+                                <span className="text-sm text-foreground">Waiting Time (WT)</span>
                             </div>
                             <div className="flex items-center gap-2">
-                                <div className="w-4 h-4 bg-green-500 rounded"></div>
-                                <span className="text-sm">Turnaround Time (TT)</span>
+                                <div className="w-4 h-4 bg-emerald-500 rounded shadow-sm"></div>
+                                <span className="text-sm text-foreground">Turnaround Time (TT)</span>
                             </div>
                             <div className="flex items-center gap-2">
-                                <div className="w-4 h-4 bg-purple-500 rounded"></div>
-                                <span className="text-sm">Burst Time (BT)</span>
+                                <div className="w-4 h-4 bg-purple-500 rounded shadow-sm"></div>
+                                <span className="text-sm text-foreground">Burst Time (BT)</span>
                             </div>
                         </div>
                     </div>
@@ -172,43 +233,56 @@ export const MetricsChart: React.FC<MetricsChartProps> = ({
             </Card>
 
             {/* Detailed Process Table */}
-            <Card>
+            <Card className="bg-card border-border">
                 <CardHeader>
-                    <CardTitle>Detailed Process Information</CardTitle>
+                    <CardTitle className="text-foreground">Detailed Process Information</CardTitle>
                 </CardHeader>
                 <CardContent>
                     <div className="overflow-x-auto">
                         <table className="w-full">
                             <thead>
-                                <tr className="border-b">
-                                    <th className="text-left p-2">Process</th>
-                                    <th className="text-right p-2">Arrival Time</th>
-                                    <th className="text-right p-2">Burst Time</th>
-                                    <th className="text-right p-2">Waiting Time</th>
-                                    <th className="text-right p-2">Turnaround Time</th>
-                                    <th className="text-right p-2">Completion Time</th>
+                                <tr className="border-b border-border">
+                                    <th className="text-left p-3 text-foreground font-medium">Process</th>
+                                    <th className="text-right p-3 text-foreground font-medium">Arrival Time</th>
+                                    <th className="text-right p-3 text-foreground font-medium">Burst Time</th>
+                                    <th className="text-right p-3 text-foreground font-medium">Waiting Time</th>
+                                    <th className="text-right p-3 text-foreground font-medium">Turnaround Time</th>
+                                    <th className="text-right p-3 text-foreground font-medium">Completion Time</th>
                                     {processes.some(p => p.priority !== undefined) && (
-                                        <th className="text-right p-2">Priority</th>
+                                        <th className="text-right p-3 text-foreground font-medium">Priority</th>
                                     )}
                                 </tr>
                             </thead>
                             <tbody>
                                 {processes.map((process, index) => (
-                                    <tr key={process.pid} className={index % 2 === 0 ? 'bg-gray-50' : ''}>
-                                        <td className="p-2">
-                                            <Badge variant="outline">P{process.pid}</Badge>
+                                    <tr 
+                                        key={process.pid} 
+                                        className={`border-b border-border/50 hover:bg-muted/30 transition-colors ${
+                                            index % 2 === 0 ? 'bg-muted/10' : ''
+                                        }`}
+                                    >
+                                        <td className="p-3">
+                                            <Badge variant="outline" className="border-border text-foreground">
+                                                P{process.pid}
+                                            </Badge>
                                         </td>
-                                        <td className="text-right p-2">{(process.arrival_time || 0).toFixed(1)}</td>
-                                        <td className="text-right p-2">{(process.burst_time || 0).toFixed(1)}</td>
-                                        <td className="text-right p-2 text-blue-600 font-medium">
+                                        <td className="text-right p-3 text-muted-foreground font-mono">
+                                            {(process.arrival_time || 0).toFixed(1)}
+                                        </td>
+                                        <td className="text-right p-3 text-muted-foreground font-mono">
+                                            {(process.burst_time || 0).toFixed(1)}
+                                        </td>
+                                        <td className="text-right p-3 text-blue-400 font-medium font-mono">
                                             {(process.waiting_time || 0).toFixed(2)}
                                         </td>
-                                        <td className="text-right p-2 text-green-600 font-medium">
+                                        <td className="text-right p-3 text-emerald-400 font-medium font-mono">
                                             {(process.turnaround_time || 0).toFixed(2)}
                                         </td>
-                                        <td className="text-right p-2">{(process.completion_time || 0).toFixed(1)}</td>
+                                        <td className="text-right p-3 text-muted-foreground font-mono">
+                                            {(process.completion_time || 0).toFixed(1)}
+                                        </td>
                                         {processes.some(p => p.priority !== undefined) && (
-                                            <td className="text-right p-2">
+                                            <td className="text-right p-3 text-muted-foreground font-mono">
                                                 {process.priority !== undefined ? process.priority : '-'}
                                             </td>
                                         )}
