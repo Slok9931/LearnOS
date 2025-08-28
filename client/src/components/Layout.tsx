@@ -47,7 +47,7 @@ export default function Layout( { children }: LayoutProps ) {
         <div className="min-h-screen bg-background">
             {/* Navigation */}
             <nav className="bg-card border-b border-border shadow-sm">
-                <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+                <div className="mx-auto px-4">
                     <div className="flex h-16 justify-between items-center">
                         <div className="flex items-center space-x-4">
                             <Link to="/" className="flex items-center space-x-2">
