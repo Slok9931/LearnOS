@@ -41,7 +41,7 @@ interface MLFQConfig {
 
 export default function CPUScheduling() {
   const [processes, setProcesses] = useState<Process[]>([
-    { id: 1, arrival_time: 0, burst_time: 5, priority: 1 }
+    { id: 1, arrival_time: 0, burst_time: 5, priority: 0 }  // Changed from 1 to 0
   ])
   
   // Basic algorithm parameters
@@ -124,12 +124,12 @@ export default function CPUScheduling() {
 
   const addProcess = () => {
     const newId = Math.max(...processes.map(p => p.id), 0) + 1
-    setProcesses([...processes, { id: newId, arrival_time: 0, burst_time: 1, priority: 1 }])
+    setProcesses([...processes, { id: newId, arrival_time: 0, burst_time: 1, priority: 0 }])  // Changed from 1 to 0
   }
 
   const addSampleProcesses = () => {
     const sampleProcesses: Process[] = [
-      { id: 1, arrival_time: 0, burst_time: 6, priority: 1 },
+      { id: 1, arrival_time: 0, burst_time: 6, priority: 0 },  // Changed from 1 to 0
       { id: 2, arrival_time: 1, burst_time: 8, priority: 2 },
       { id: 3, arrival_time: 2, burst_time: 7, priority: 0 },
       { id: 4, arrival_time: 3, burst_time: 3, priority: 3 },
@@ -143,7 +143,7 @@ export default function CPUScheduling() {
       ...p,
       arrival_time: Math.floor(Math.random() * 5),
       burst_time: Math.floor(Math.random() * 10) + 1,
-      priority: Math.floor(Math.random() * 4)
+      priority: Math.floor(Math.random() * 4)  // This generates 0-3, which is correct
     }))
     setProcesses(shuffled)
   }
@@ -176,11 +176,13 @@ export default function CPUScheduling() {
         setError(`Process ${process.id}: Arrival time cannot be negative`)
         return false
       }
-      if ((activeAlgorithm === 'priority' || activeAlgorithm === 'mlfq') && (!process.priority || process.priority < 0)) {
-        setError(`Process ${process.id}: Priority must be specified and non-negative for ${activeAlgorithm} scheduling`)
+      if ((activeAlgorithm === 'priority' || activeAlgorithm === 'mlfq') && 
+          (process.priority === undefined || process.priority === null || process.priority < 0)) {
+        setError(`Process ${process.id}: Priority must be specified and non-negative (0 = highest priority) for ${activeAlgorithm} scheduling`)
         return false
       }
     }
+    setError(null)  // Clear any existing errors if validation passes
     return true
   }
 
@@ -201,7 +203,7 @@ export default function CPUScheduling() {
       const request: SchedulingRequest = {
         processes: processes.map(p => ({
           ...p,
-          priority: p.priority || 0
+          priority: p.priority !== undefined ? p.priority : 0  // Ensure priority is always set
         })),
         context_switch_cost: contextSwitchCost,
       }
@@ -456,14 +458,14 @@ export default function CPUScheduling() {
                         {(activeAlgorithm === 'priority' || activeAlgorithm === 'mlfq') && (
                           <div>
                             <Label htmlFor={`priority-${process.id}`} className="text-xs text-muted-foreground">
-                              Priority (1 = highest)
+                              Priority (0 = highest)
                             </Label>
                             <Input
                               id={`priority-${process.id}`}
                               type="number"
                               min="0"
-                              value={process.priority || 1}
-                              onChange={(e) => updateProcess(process.id, 'priority', parseInt(e.target.value) || 1)}
+                              value={process.priority || 0}
+                              onChange={(e) => updateProcess(process.id, 'priority', parseInt(e.target.value) || 0)}
                               className="h-8 text-sm"
                             />
                           </div>

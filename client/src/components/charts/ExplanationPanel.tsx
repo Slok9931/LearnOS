@@ -407,7 +407,7 @@ export const ExplanationPanel: React.FC<ExplanationPanelProps> = ({
             {showDetails ? 'Hide Details' : 'Show Details'}
           </Button>
           
-          <ScrollArea className="h-32 w-full border border-border rounded-md p-2">
+          <ScrollArea className="max-h-[50vh] overflow-y-auto w-full border border-border rounded-md p-2">
             <div className="space-y-1">
               {explanationSteps.map((step, index) => (
                 <div
