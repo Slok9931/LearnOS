@@ -1,5 +1,4 @@
 import React, { ReactNode } from 'react'
-import { AppBar, Toolbar, Typography, Container, Box, Tabs, Tab, IconButton, Tooltip } from '@mui/material'
 import { Cpu, HardDrive, MemoryStick, Home, Github, Monitor } from 'lucide-react'
 import { Link, useLocation, Outlet } from 'react-router-dom'
 import { cn } from '@/lib/utils'
@@ -81,7 +80,7 @@ export default function Layout( { children }: LayoutProps ) {
                         </div>
 
                         <a
-                          href="https://github.com"
+                          href="https://github.com/Slok9931/LearnOS"
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-muted-foreground hover:text-foreground"
