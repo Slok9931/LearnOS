@@ -2,7 +2,7 @@
 // Edit this file to change API endpoints and configuration
 
 export const API_CONFIG = {
-  BASE_URL: "http://localhost:5000", // Change this to your backend URL
+  BASE_URL: "https://learnos-server.onrender.com", // Change this to your backend URL
   ENDPOINTS: {
     CPU_SCHEDULING: {
       FCFS: "/api/cpu/fcfs",
