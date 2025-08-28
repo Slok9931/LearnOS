@@ -51,23 +51,35 @@ export interface BackendSchedulingResponse {
 // Frontend types for CPU scheduling
 
 export interface Process {
-  id: number;
-  arrival_time: number;
-  burst_time: number;
-  priority?: number;
+  id: number
+  arrival_time: number
+  burst_time: number
+  priority?: number
+  weight?: number
 }
 
 export interface SchedulingRequest {
-  processes: Process[];
-  time_quantum?: number;
-  context_switch_cost?: number;
-  preemptive?: boolean;
+  processes: Process[]
+  time_quantum?: number
+  context_switch_cost?: number
+  preemptive?: boolean
+  
+  // Round Robin variations
+  rr_variation?: 'standard' | 'weighted' | 'deficit'
+  process_weights?: {[key: number]: number}
+  
+  // Priority scheduling options
+  priority_type?: 'fixed' | 'dynamic'
+  priority_inversion_handling?: boolean
+  
   mlfq_config?: {
-    num_queues?: number;
-    time_quantums?: number[];
-    aging_threshold?: number;
-    boost_interval?: number;
-  };
+    num_queues?: number
+    time_quantums?: number[]
+    aging_threshold?: number
+    boost_interval?: number
+    priority_boost?: boolean
+    feedback_mechanism?: 'time' | 'io' | 'both'
+  }
 }
 
 export interface ScheduleEntry {

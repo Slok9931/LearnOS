@@ -39,9 +39,9 @@ apiClient.interceptors.response.use(
 
 // Convert frontend process format to what backend expects
 const prepareRequestData = (request: SchedulingRequest) => {
-  return {
+  const requestData: any = {
     processes: request.processes.map(p => ({
-      id: p.id,  // Keep as 'id' - backend will handle conversion
+      id: p.id,
       arrival_time: p.arrival_time,
       burst_time: p.burst_time,
       priority: p.priority || 0,
@@ -51,6 +51,24 @@ const prepareRequestData = (request: SchedulingRequest) => {
     preemptive: request.preemptive,
     mlfq_config: request.mlfq_config,
   };
+
+  // Add Round Robin specific parameters
+  if (request.rr_variation) {
+    requestData.rr_variation = request.rr_variation;
+    if (request.process_weights) {
+      requestData.process_weights = request.process_weights;
+    }
+  }
+
+  // Add Priority scheduling specific parameters
+  if (request.priority_type) {
+    requestData.priority_type = request.priority_type;
+  }
+  if (request.priority_inversion_handling !== undefined) {
+    requestData.priority_inversion_handling = request.priority_inversion_handling;
+  }
+
+  return requestData;
 };
 
 // Add proper error handling and data validation

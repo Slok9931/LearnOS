@@ -5,9 +5,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
-import { Separator } from '@/components/ui/separator'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { ScrollArea } from '@/components/ui/scroll-area'
+import { Switch } from '@/components/ui/switch'
 import { 
   Plus, 
   Trash2, 
@@ -21,29 +20,84 @@ import {
   ChevronRight,
   ChevronDown,
   Copy,
-  Shuffle
+  Shuffle,
+  Info
 } from 'lucide-react'
 import { GanttChart } from '@/components/charts/GanttChart'
 import { MetricsChart } from '@/components/charts/MetricsChart'
 import schedulingApi, { handleApiError } from '@/services/api'
 import { Process, SchedulingRequest, SchedulingResult } from '@/types/scheduling'
 
+interface MLFQConfig {
+  num_queues: number
+  time_quantums: number[]
+  aging_threshold: number
+  boost_interval: number
+  priority_boost: boolean
+  feedback_mechanism: 'time' | 'io' | 'both'
+}
+
 export default function CPUScheduling() {
   const [processes, setProcesses] = useState<Process[]>([
     { id: 1, arrival_time: 0, burst_time: 5, priority: 1 }
   ])
+  
+  // Basic algorithm parameters
   const [timeQuantum, setTimeQuantum] = useState(2)
+  const [contextSwitchCost, setContextSwitchCost] = useState(0.5)
+  const [preemptive, setPreemptive] = useState(false)
+  
+  // MLFQ Configuration
+  const [mlfqConfig, setMlfqConfig] = useState<MLFQConfig>({
+    num_queues: 3,
+    time_quantums: [2, 4, 8],
+    aging_threshold: 10,
+    boost_interval: 100,
+    priority_boost: true,
+    feedback_mechanism: 'time'
+  })
+  
+  // Round Robin variations
+  const [rrVariation, setRrVariation] = useState<'standard' | 'weighted' | 'deficit'>('standard')
+  const [processWeights, setProcessWeights] = useState<{[key: number]: number}>({})
+  
+  // Priority scheduling options
+  const [priorityType, setPriorityType] = useState<'fixed' | 'dynamic'>('fixed')
+  const [priorityInversion, setPriorityInversion] = useState(false)
+  
   const [results, setResults] = useState<SchedulingResult | null>(null)
   const [loading, setLoading] = useState(false)
   const [activeAlgorithm, setActiveAlgorithm] = useState('fcfs')
   const [serverStatus, setServerStatus] = useState<'checking' | 'healthy' | 'unhealthy'>('checking')
   const [error, setError] = useState<string | null>(null)
   const [processListExpanded, setProcessListExpanded] = useState(true)
+  const [advancedConfigExpanded, setAdvancedConfigExpanded] = useState(true)
 
   // Check server health on component mount
   useEffect(() => {
     checkServerHealth()
   }, [])
+
+  // Update process weights when processes change
+  useEffect(() => {
+    const weights: {[key: number]: number} = {}
+    processes.forEach(p => {
+      if (!(p.id in processWeights)) {
+        weights[p.id] = 1
+      } else {
+        weights[p.id] = processWeights[p.id]
+      }
+    })
+    setProcessWeights(weights)
+  }, [processes])
+
+  // Update MLFQ time quantums when number of queues changes
+  useEffect(() => {
+    const newQuantums = Array.from({ length: mlfqConfig.num_queues }, (_, i) => 
+      i < mlfqConfig.time_quantums.length ? mlfqConfig.time_quantums[i] : Math.pow(2, i + 1)
+    )
+    setMlfqConfig(prev => ({ ...prev, time_quantums: newQuantums }))
+  }, [mlfqConfig.num_queues])
 
   const checkServerHealth = async () => {
     try {
@@ -103,6 +157,12 @@ export default function CPUScheduling() {
     ))
   }
 
+  const updateMLFQQuantum = (index: number, value: number) => {
+    const newQuantums = [...mlfqConfig.time_quantums]
+    newQuantums[index] = value
+    setMlfqConfig(prev => ({ ...prev, time_quantums: newQuantums }))
+  }
+
   const validateProcesses = (): boolean => {
     for (const process of processes) {
       if (process.burst_time <= 0) {
@@ -138,11 +198,12 @@ export default function CPUScheduling() {
       const request: SchedulingRequest = {
         processes: processes.map(p => ({
           ...p,
-          priority: p.priority || 0,
+          priority: p.priority || 0
         })),
-        context_switch_cost: 0.5,
+        context_switch_cost: contextSwitchCost,
       }
 
+      // Algorithm-specific configurations
       if (algorithm === 'round-robin') {
         if (timeQuantum <= 0) {
           setError('Time quantum must be greater than 0 for Round Robin scheduling')
@@ -150,18 +211,39 @@ export default function CPUScheduling() {
           return
         }
         request.time_quantum = timeQuantum
+        
+        // Add Round Robin variation support
+        if (rrVariation === 'weighted') {
+          request.process_weights = processWeights
+        }
+        request.rr_variation = rrVariation
       }
 
       if (algorithm === 'sjf' || algorithm === 'priority') {
-        request.preemptive = false
+        request.preemptive = preemptive
+        
+        // Add priority-specific options
+        if (algorithm === 'priority') {
+          request.priority_type = priorityType
+          request.priority_inversion_handling = priorityInversion
+        }
       }
 
       if (algorithm === 'mlfq') {
+        if (mlfqConfig.time_quantums.some(q => q <= 0)) {
+          setError('All time quantums must be greater than 0 for MLFQ scheduling')
+          setLoading(false)
+          return
+        }
         request.mlfq_config = {
-          num_queues: 3,
-          time_quantums: [2, 4, 8],
-          aging_threshold: 10,
-          boost_interval: 100
+          ...mlfqConfig,
+          // Ensure all MLFQ config is properly sent
+          num_queues: mlfqConfig.num_queues,
+          time_quantums: mlfqConfig.time_quantums,
+          aging_threshold: mlfqConfig.aging_threshold,
+          boost_interval: mlfqConfig.boost_interval,
+          priority_boost: mlfqConfig.priority_boost,
+          feedback_mechanism: mlfqConfig.feedback_mechanism
         }
       }
 
@@ -220,7 +302,7 @@ export default function CPUScheduling() {
               CPU Scheduling Simulator
             </h1>
             <p className="text-muted-foreground text-sm sm:text-base max-w-2xl mx-auto">
-              Simulate and visualize different CPU scheduling algorithms with interactive charts and performance metrics
+              Simulate and visualize different CPU scheduling algorithms with comprehensive configuration options
             </p>
           </div>
 
@@ -284,8 +366,8 @@ export default function CPUScheduling() {
                 <div className="flex items-center gap-3">
                   <Settings className="h-5 w-5 text-primary" />
                   <div>
-                    <CardTitle className="text-foreground">Configuration</CardTitle>
-                    <CardDescription>Set up processes and algorithm parameters</CardDescription>
+                    <CardTitle className="text-foreground">Process Configuration</CardTitle>
+                    <CardDescription>Set up processes and their properties</CardDescription>
                   </div>
                 </div>
                 <Button
@@ -367,17 +449,37 @@ export default function CPUScheduling() {
                             />
                           </div>
                         </div>
+                        
                         {(activeAlgorithm === 'priority' || activeAlgorithm === 'mlfq') && (
                           <div>
                             <Label htmlFor={`priority-${process.id}`} className="text-xs text-muted-foreground">
-                              Priority (0 = highest)
+                              Priority (1 = highest)
                             </Label>
                             <Input
                               id={`priority-${process.id}`}
                               type="number"
                               min="0"
-                              value={process.priority || 0}
-                              onChange={(e) => updateProcess(process.id, 'priority', parseInt(e.target.value) || 0)}
+                              value={process.priority || 1}
+                              onChange={(e) => updateProcess(process.id, 'priority', parseInt(e.target.value) || 1)}
+                              className="h-8 text-sm"
+                            />
+                          </div>
+                        )}
+
+                        {(activeAlgorithm === 'round-robin' && rrVariation === 'weighted') && (
+                          <div>
+                            <Label htmlFor={`weight-${process.id}`} className="text-xs text-muted-foreground">
+                              Weight
+                            </Label>
+                            <Input
+                              id={`weight-${process.id}`}
+                              type="number"
+                              min="1"
+                              value={processWeights[process.id] || 1}
+                              onChange={(e) => setProcessWeights(prev => ({
+                                ...prev,
+                                [process.id]: parseInt(e.target.value) || 1
+                              }))}
                               className="h-8 text-sm"
                             />
                           </div>
@@ -386,54 +488,34 @@ export default function CPUScheduling() {
                     </Card>
                   ))}
                 </div>
-
-                {/* Algorithm Configuration */}
-                <div className="grid md:grid-cols-2 gap-6 pt-4 border-t border-border/50">
-                  {/* Time Quantum Setting */}
-                  {activeAlgorithm === 'round-robin' && (
-                    <div className="space-y-2 flex flex-col items-start">
-                      <Label htmlFor="time-quantum" className="text-sm font-medium text-foreground">
-                        Time Quantum
-                      </Label>
-                      <Input
-                        id="time-quantum"
-                        type="number"
-                        min="1"
-                        value={timeQuantum}
-                        onChange={(e) => setTimeQuantum(parseInt(e.target.value) || 1)}
-                        className="max-w-32"
-                      />
-                    </div>
-                  )}
-
-                  {/* Algorithm Info */}
-                  <div className="space-y-2 flex flex-col items-end">
-                    <Label className="text-sm font-medium text-foreground">Current Algorithm</Label>
-                    <div className="flex items-center gap-2">
-                      <Badge variant="default">
-                        {activeAlgorithm.toUpperCase().replace('-', ' ')}
-                      </Badge>
-                      <span className="text-sm text-muted-foreground">
-                        {getAlgorithmDescription(activeAlgorithm)}
-                      </span>
-                    </div>
-                  </div>
-                </div>
               </CardContent>
             )}
           </Card>
 
-          {/* Algorithm Selection and Simulation */}
+          {/* Algorithm Configuration */}
           <Card className="bg-card border-border">
             <CardHeader>
-              <div className="flex items-center gap-3 mb-4">
-                <Clock className="h-5 w-5 text-primary" />
-                <div>
-                  <CardTitle className="text-foreground">Algorithm Selection</CardTitle>
-                  <CardDescription>Choose and run different scheduling algorithms</CardDescription>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Clock className="h-5 w-5 text-primary" />
+                  <div>
+                    <CardTitle className="text-foreground">Algorithm Configuration</CardTitle>
+                    <CardDescription>Configure algorithm-specific parameters</CardDescription>
+                  </div>
                 </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setAdvancedConfigExpanded(!advancedConfigExpanded)}
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  {advancedConfigExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                </Button>
               </div>
-              
+            </CardHeader>
+            
+            <CardContent className="space-y-6">
+              {/* Algorithm Selection */}
               <Tabs value={activeAlgorithm} onValueChange={setActiveAlgorithm} className="w-full">
                 <TabsList className="grid w-full grid-cols-5 bg-muted">
                   <TabsTrigger value="fcfs" className="text-xs sm:text-sm">FCFS</TabsTrigger>
@@ -443,31 +525,341 @@ export default function CPUScheduling() {
                   <TabsTrigger value="mlfq" className="text-xs sm:text-sm">MLFQ</TabsTrigger>
                 </TabsList>
 
-                {['fcfs', 'sjf', 'priority', 'round-robin', 'mlfq'].map((algorithm) => (
-                  <TabsContent key={algorithm} value={algorithm} className="mt-4">
-                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 bg-muted/30 rounded-lg border border-border/50">
-                      <div className="space-y-1">
-                        <h3 className="font-medium text-foreground capitalize">
-                          {algorithm.replace('-', ' ')} Scheduling
-                        </h3>
-                        <p className="text-sm text-muted-foreground">
-                          {getAlgorithmDescription(algorithm)}
-                        </p>
+                {/* FCFS Configuration */}
+                <TabsContent value="fcfs" className="mt-4">
+                  <div className="p-4 bg-muted/30 rounded-lg border border-border/50">
+                    <div className="space-y-4">
+                      <div>
+                        <h3 className="font-medium text-foreground">First Come First Served (FCFS)</h3>
+                        <p className="text-sm text-muted-foreground">Non-preemptive algorithm that executes processes in order of arrival</p>
                       </div>
+                      {advancedConfigExpanded && (
+                        <div className="grid md:grid-cols-2 gap-4 pt-4 border-t border-border/50">
+                          <div>
+                            <Label className="text-sm font-medium text-foreground">Context Switch Cost</Label>
+                            <Input
+                              type="number"
+                              min="0"
+                              step="0.1"
+                              value={contextSwitchCost}
+                              onChange={(e) => setContextSwitchCost(parseFloat(e.target.value) || 0)}
+                              className="mt-1"
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </TabsContent>
+
+                {/* SJF Configuration */}
+                <TabsContent value="sjf" className="mt-4">
+                  <div className="p-4 bg-muted/30 rounded-lg border border-border/50">
+                    <div className="space-y-4">
+                      <div>
+                        <h3 className="font-medium text-foreground">Shortest Job First (SJF)</h3>
+                        <p className="text-sm text-muted-foreground">Executes the process with the shortest burst time first</p>
+                      </div>
+                      <div className="grid md:grid-cols-2 gap-4">
+                        <div className="flex items-center space-x-2">
+                          <Switch
+                            id="sjf-preemptive"
+                            checked={preemptive}
+                            onCheckedChange={setPreemptive}
+                          />
+                          <Label htmlFor="sjf-preemptive" className="text-sm">
+                            Preemptive (SRTF - Shortest Remaining Time First)
+                          </Label>
+                        </div>
+                        {advancedConfigExpanded && (
+                          <div>
+                            <Label className="text-sm font-medium text-foreground">Context Switch Cost</Label>
+                            <Input
+                              type="number"
+                              min="0"
+                              step="0.1"
+                              value={contextSwitchCost}
+                              onChange={(e) => setContextSwitchCost(parseFloat(e.target.value) || 0)}
+                              className="mt-1"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </TabsContent>
+
+                {/* Priority Configuration */}
+                <TabsContent value="priority" className="mt-4">
+                  <div className="p-4 bg-muted/30 rounded-lg border border-border/50">
+                    <div className="space-y-4">
+                      <div>
+                        <h3 className="font-medium text-foreground">Priority Scheduling</h3>
+                        <p className="text-sm text-muted-foreground">Executes processes based on priority levels (0 = highest priority)</p>
+                      </div>
+                      <div className="grid md:grid-cols-2 gap-4">
+                        <div className="flex items-center space-x-2">
+                          <Switch
+                            id="priority-preemptive"
+                            checked={preemptive}
+                            onCheckedChange={setPreemptive}
+                          />
+                          <Label htmlFor="priority-preemptive" className="text-sm">
+                            Preemptive Priority Scheduling
+                          </Label>
+                        </div>
+                        <div>
+                          <Label className="text-sm font-medium text-foreground">Priority Type</Label>
+                          <select
+                            value={priorityType}
+                            onChange={(e) => setPriorityType(e.target.value as 'fixed' | 'dynamic')}
+                            className="w-full mt-1 p-2 bg-background border border-border rounded-md text-sm"
+                          >
+                            <option value="fixed">Fixed Priority</option>
+                            <option value="dynamic">Dynamic Priority</option>
+                          </select>
+                        </div>
+                      </div>
+                      {advancedConfigExpanded && (
+                        <div className="grid md:grid-cols-2 gap-4 pt-4 border-t border-border/50">
+                          <div className="flex items-center space-x-2">
+                            <Switch
+                              id="priority-inversion"
+                              checked={priorityInversion}
+                              onCheckedChange={setPriorityInversion}
+                            />
+                            <Label htmlFor="priority-inversion" className="text-sm">
+                              Priority Inversion Handling
+                            </Label>
+                          </div>
+                          <div>
+                            <Label className="text-sm font-medium text-foreground">Context Switch Cost</Label>
+                            <Input
+                              type="number"
+                              min="0"
+                              step="0.1"
+                              value={contextSwitchCost}
+                              onChange={(e) => setContextSwitchCost(parseFloat(e.target.value) || 0)}
+                              className="mt-1"
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </TabsContent>
+
+                {/* Round Robin Configuration */}
+                <TabsContent value="round-robin" className="mt-4">
+                  <div className="p-4 bg-muted/30 rounded-lg border border-border/50">
+                    <div className="space-y-4">
+                      <div>
+                        <h3 className="font-medium text-foreground">Round Robin Scheduling</h3>
+                        <p className="text-sm text-muted-foreground">Each process gets equal time slices in cyclic order</p>
+                      </div>
+                      <div className="grid md:grid-cols-3 gap-4">
+                        <div>
+                          <Label className="text-sm font-medium text-foreground">Time Quantum</Label>
+                          <Input
+                            type="number"
+                            min="1"
+                            value={timeQuantum}
+                            onChange={(e) => setTimeQuantum(parseInt(e.target.value) || 1)}
+                            className="mt-1"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-sm font-medium text-foreground">Round Robin Variation</Label>
+                          <select
+                            value={rrVariation}
+                            onChange={(e) => setRrVariation(e.target.value as 'standard' | 'weighted' | 'deficit')}
+                            className="w-full mt-1 p-2 bg-background border border-border rounded-md text-sm"
+                          >
+                            <option value="standard">Standard Round Robin</option>
+                            <option value="weighted">Weighted Round Robin</option>
+                            <option value="deficit">Deficit Round Robin</option>
+                          </select>
+                        </div>
+                        {advancedConfigExpanded && (
+                          <div>
+                            <Label className="text-sm font-medium text-foreground">Context Switch Cost</Label>
+                            <Input
+                              type="number"
+                              min="0"
+                              step="0.1"
+                              value={contextSwitchCost}
+                              onChange={(e) => setContextSwitchCost(parseFloat(e.target.value) || 0)}
+                              className="mt-1"
+                            />
+                          </div>
+                        )}
+                      </div>
+                      {rrVariation !== 'standard' && (
+                        <div className="pt-4 border-t border-border/50">
+                          <div className="flex items-center gap-2 mb-2">
+                            <Info className="h-4 w-4 text-blue-400" />
+                            <span className="text-sm text-muted-foreground">
+                              {rrVariation === 'weighted' 
+                                ? 'Set process weights in the process configuration above'
+                                : 'Deficit counter maintains fairness across different burst times'
+                              }
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </TabsContent>
+
+                {/* MLFQ Configuration */}
+                <TabsContent value="mlfq" className="mt-4">
+                  <div className="p-4 bg-muted/30 rounded-lg border border-border/50">
+                    <div className="space-y-6">
+                      <div>
+                        <h3 className="font-medium text-foreground">Multi-Level Feedback Queue (MLFQ)</h3>
+                        <p className="text-sm text-muted-foreground">Dynamic priority queues with feedback mechanisms</p>
+                      </div>
+                      
+                      {/* Basic MLFQ Settings */}
+                      <div className="grid md:grid-cols-2 gap-4">
+                        <div>
+                          <Label className="text-sm font-medium text-foreground">Number of Queues</Label>
+                          <Input
+                            type="number"
+                            min="2"
+                            max="10"
+                            value={mlfqConfig.num_queues}
+                            onChange={(e) => setMlfqConfig(prev => ({
+                              ...prev,
+                              num_queues: parseInt(e.target.value) || 2
+                            }))}
+                            className="mt-1"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-sm font-medium text-foreground">Feedback Mechanism</Label>
+                          <select
+                            value={mlfqConfig.feedback_mechanism}
+                            onChange={(e) => setMlfqConfig(prev => ({
+                              ...prev,
+                              feedback_mechanism: e.target.value as 'time' | 'io' | 'both'
+                            }))}
+                            className="w-full mt-1 p-2 bg-background border border-border rounded-md text-sm"
+                          >
+                            <option value="time">Time-based Feedback</option>
+                            <option value="io">I/O-based Feedback</option>
+                            <option value="both">Combined Feedback</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* Time Quantums for Each Queue */}
+                      <div>
+                        <Label className="text-sm font-medium text-foreground mb-2 block">
+                          Time Quantum for Each Queue
+                        </Label>
+                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2">
+                          {mlfqConfig.time_quantums.map((quantum, index) => (
+                            <div key={index} className="space-y-1">
+                              <Label className="text-xs text-muted-foreground">Queue {index}</Label>
+                              <Input
+                                type="number"
+                                min="1"
+                                value={quantum}
+                                onChange={(e) => updateMLFQQuantum(index, parseInt(e.target.value) || 1)}
+                                className="h-8 text-sm"
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Advanced MLFQ Settings */}
+                      <div className="grid md:grid-cols-2 gap-4">
+                        <div>
+                          <Label className="text-sm font-medium text-foreground">Aging Threshold</Label>
+                          <Input
+                            type="number"
+                            min="1"
+                            value={mlfqConfig.aging_threshold}
+                            onChange={(e) => setMlfqConfig(prev => ({
+                              ...prev,
+                              aging_threshold: parseInt(e.target.value) || 1
+                            }))}
+                            className="mt-1"
+                          />
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Time units before promoting to higher priority queue
+                          </p>
+                        </div>
+                        <div>
+                          <Label className="text-sm font-medium text-foreground">Priority Boost Interval</Label>
+                          <Input
+                            type="number"
+                            min="0"
+                            value={mlfqConfig.boost_interval}
+                            onChange={(e) => setMlfqConfig(prev => ({
+                              ...prev,
+                              boost_interval: parseInt(e.target.value) || 0
+                            }))}
+                            className="mt-1"
+                          />
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Interval to boost all processes to highest queue (0 = disabled)
+                          </p>
+                        </div>
+                      </div>
+
+                      {advancedConfigExpanded && (
+                        <div className="grid md:grid-cols-2 gap-4 pt-4 border-t border-border/50">
+                          <div className="flex items-center space-x-2">
+                            <Switch
+                              id="mlfq-priority-boost"
+                              checked={mlfqConfig.priority_boost}
+                              onCheckedChange={(checked) => setMlfqConfig(prev => ({
+                                ...prev,
+                                priority_boost: checked
+                              }))}
+                            />
+                            <Label htmlFor="mlfq-priority-boost" className="text-sm">
+                              Enable Priority Boosting
+                            </Label>
+                          </div>
+                          <div>
+                            <Label className="text-sm font-medium text-foreground">Context Switch Cost</Label>
+                            <Input
+                              type="number"
+                              min="0"
+                              step="0.1"
+                              value={contextSwitchCost}
+                              onChange={(e) => setContextSwitchCost(parseFloat(e.target.value) || 0)}
+                              className="mt-1"
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </TabsContent>
+
+                {/* Run Button for Each Algorithm */}
+                {['fcfs', 'sjf', 'priority', 'round-robin', 'mlfq'].map((algorithm) => (
+                  <TabsContent key={`${algorithm}-run`} value={algorithm}>
+                    <div className="flex justify-center pt-4">
                       <Button
                         onClick={() => runAlgorithm(algorithm)}
                         disabled={loading || serverStatus !== 'healthy'}
-                        className="flex items-center gap-2 min-w-[140px]"
+                        className="flex items-center gap-2 min-w-[160px]"
                         size="lg"
                       >
                         <Play className="w-4 h-4" />
-                        {loading ? 'Running...' : 'Run Simulation'}
+                        {loading ? 'Running Simulation...' : `Run ${algorithm.toUpperCase().replace('-', ' ')} Simulation`}
                       </Button>
                     </div>
                   </TabsContent>
                 ))}
               </Tabs>
-            </CardHeader>
+            </CardContent>
           </Card>
 
           {/* Results Section */}
@@ -502,12 +894,12 @@ export default function CPUScheduling() {
                 <Clock className="h-12 w-12 text-muted-foreground mb-4" />
                 <h3 className="text-lg font-medium text-foreground mb-2">Ready to Simulate</h3>
                 <p className="text-muted-foreground mb-4 max-w-md">
-                  Configure your processes above and select an algorithm to run the simulation. 
+                  Configure your processes and algorithm parameters above, then run the simulation. 
                   The Gantt chart and performance metrics will appear here.
                 </p>
                 <div className="flex flex-wrap gap-2 justify-center">
                   <Badge variant="outline">Configure Processes</Badge>
-                  <Badge variant="outline">Select Algorithm</Badge>
+                  <Badge variant="outline">Set Algorithm Parameters</Badge>
                   <Badge variant="outline">Run Simulation</Badge>
                 </div>
               </CardContent>
