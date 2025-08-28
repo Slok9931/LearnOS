@@ -391,7 +391,7 @@ export default function CPUScheduling() {
                 <div className="grid md:grid-cols-2 gap-6 pt-4 border-t border-border/50">
                   {/* Time Quantum Setting */}
                   {activeAlgorithm === 'round-robin' && (
-                    <div className="space-y-2">
+                    <div className="space-y-2 flex flex-col items-start">
                       <Label htmlFor="time-quantum" className="text-sm font-medium text-foreground">
                         Time Quantum
                       </Label>
@@ -407,7 +407,7 @@ export default function CPUScheduling() {
                   )}
 
                   {/* Algorithm Info */}
-                  <div className="space-y-2">
+                  <div className="space-y-2 flex flex-col items-end">
                     <Label className="text-sm font-medium text-foreground">Current Algorithm</Label>
                     <div className="flex items-center gap-2">
                       <Badge variant="default">
