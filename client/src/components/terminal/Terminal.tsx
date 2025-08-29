@@ -16,29 +16,32 @@ export const Terminal: React.FC = () => {
     setCurrentCommand,
     isLoading,
     handleKeyDown,
-    resetSystem
+    resetSystem,
+    inputRef,
+    focusInput
   } = useTerminal()
 
-  const inputRef = useRef<HTMLInputElement>(null)
   const terminalRef = useRef<HTMLDivElement>(null)
   const [isFullScreen, setIsFullScreen] = useState(false)
 
-  // Auto-focus input and scroll to bottom
+  // Auto-focus input on mount
   useEffect(() => {
     if (inputRef.current) {
       inputRef.current.focus()
     }
   }, [])
 
+  // Auto-scroll to bottom when history changes
   useEffect(() => {
     if (terminalRef.current) {
       terminalRef.current.scrollTop = terminalRef.current.scrollHeight
     }
   }, [history])
 
-  // Focus input when terminal is clicked
-  const handleTerminalClick = () => {
-    if (inputRef.current) {
+  // Focus input when terminal area is clicked (but not on input itself)
+  const handleTerminalClick = (e: React.MouseEvent) => {
+    // Only focus if not clicking on the input itself
+    if (e.target !== inputRef.current && inputRef.current) {
       inputRef.current.focus()
     }
   }
@@ -46,7 +49,6 @@ export const Terminal: React.FC = () => {
   // Fullscreen logic
   const toggleFullScreen = () => {
     if (!isFullScreen) {
-      // Enter fullscreen
       const elem = document.documentElement
       if (elem.requestFullscreen) {
         elem.requestFullscreen()
@@ -57,7 +59,6 @@ export const Terminal: React.FC = () => {
       }
       setIsFullScreen(true)
     } else {
-      // Exit fullscreen
       if (document.exitFullscreen) {
         document.exitFullscreen()
       } else if ((document as any).webkitExitFullscreen) {
@@ -69,15 +70,41 @@ export const Terminal: React.FC = () => {
     }
   }
 
-  // Listen for fullscreen change to sync state
+  // Listen for fullscreen changes
   useEffect(() => {
     const handleChange = () => {
       const isFs = !!document.fullscreenElement
       setIsFullScreen(isFs)
+      // Refocus input after fullscreen change
+      if (inputRef.current) {
+        setTimeout(() => inputRef.current?.focus(), 100)
+      }
     }
     document.addEventListener('fullscreenchange', handleChange)
     return () => document.removeEventListener('fullscreenchange', handleChange)
   }, [])
+
+  // Global keyboard listener to maintain focus
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      // If input is not focused and a printable character is typed, focus it
+      if (inputRef.current && document.activeElement !== inputRef.current) {
+        // Check if it's a printable character (not a modifier key)
+        if (e.key.length === 1 || e.key === 'Backspace' || e.key === 'Delete') {
+          e.preventDefault()
+          inputRef.current.focus()
+          
+          // If it's a printable character, add it to the input
+          if (e.key.length === 1) {
+            setCurrentCommand(prev => prev + e.key)
+          }
+        }
+      }
+    }
+
+    document.addEventListener('keydown', handleGlobalKeyDown)
+    return () => document.removeEventListener('keydown', handleGlobalKeyDown)
+  }, [setCurrentCommand])
 
   const formatTimestamp = (timestamp: number) => {
     return new Date(timestamp).toLocaleTimeString('en-US', { 
@@ -109,7 +136,7 @@ export const Terminal: React.FC = () => {
             <div className="flex items-center gap-2">
               <TerminalIcon className="h-4 w-4 text-green-400" />
               <span className="text-gray-300 text-sm font-medium">
-                OS Virtualization Terminal {isFullScreen && '(Full Screen)'}
+                LearnOS Terminal {isFullScreen && '(Full Screen)'}
               </span>
             </div>
           </div>
@@ -168,7 +195,7 @@ export const Terminal: React.FC = () => {
                     <span className="text-blue-400 mr-1">user@learnOS:</span>
                     <span className="text-blue-300 mr-1">~$</span>
                     <span className="text-white">{entry.command}</span>
-                    <span className="text-gray-600 text-xs ml-auto">
+                    <span className="text-gray-600 text-xs ml-auto hidden md:block">
                       [{formatTimestamp(entry.timestamp)}]
                     </span>
                   </div>
@@ -204,6 +231,14 @@ export const Terminal: React.FC = () => {
                     disabled={isLoading}
                     autoComplete="off"
                     spellCheck={false}
+                    onBlur={() => {
+                      // Automatically refocus after a short delay if not manually clicking somewhere else
+                      setTimeout(() => {
+                        if (inputRef.current && !isLoading) {
+                          inputRef.current.focus()
+                        }
+                      }, 10)
+                    }}
                   />
                   {isLoading && (
                     <span className="absolute top-0 text-yellow-400">
@@ -222,43 +257,48 @@ export const Terminal: React.FC = () => {
               <div className="flex items-center gap-2 text-xs text-gray-400">
                 <span>Quick commands:</span>
                 <button 
-                  onClick={() => setCurrentCommand('help')}
+                  onClick={() => {
+                    setCurrentCommand('help')
+                    focusInput()
+                  }}
                   className="text-blue-400 hover:text-blue-300 underline"
                 >
                   help
                 </button>
                 <span>|</span>
                 <button 
-                  onClick={() => setCurrentCommand('ps')}
+                  onClick={() => {
+                    setCurrentCommand('ps')
+                    focusInput()
+                  }}
                   className="text-green-400 hover:text-green-300 underline"
                 >
                   ps
                 </button>
                 <span>|</span>
                 <button 
-                  onClick={() => setCurrentCommand('ls')}
-                  className="text-cyan-400 hover:text-cyan-300 underline"
-                >
-                  ls
-                </button>
-                <span>|</span>
-                <button 
-                  onClick={() => setCurrentCommand('fork test')}
+                  onClick={() => {
+                    setCurrentCommand('fork test')
+                    focusInput()
+                  }}
                   className="text-yellow-400 hover:text-yellow-300 underline"
                 >
                   fork
                 </button>
                 <span>|</span>
                 <button 
-                  onClick={() => setCurrentCommand('trap')}
+                  onClick={() => {
+                    setCurrentCommand('trap')
+                    focusInput()
+                  }}
                   className="text-purple-400 hover:text-purple-300 underline"
                 >
                   trap
                 </button>
               </div>
               
-              <div className="flex items-center gap-2 text-xs text-gray-500">
-                <span>Press Tab for completion • Ctrl+C to interrupt</span>
+              <div className="md:flex items-center gap-2 text-xs text-gray-500 hidden">
+                <span>Press Tab for completion • Ctrl+L to clear</span>
                 {isFullScreen && (
                   <>
                     <span>•</span>

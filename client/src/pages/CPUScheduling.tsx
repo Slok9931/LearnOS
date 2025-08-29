@@ -73,7 +73,7 @@ export default function CPUScheduling() {
   const [serverStatus, setServerStatus] = useState<'checking' | 'healthy' | 'unhealthy'>('checking')
   const [error, setError] = useState<string | null>(null)
   const [processListExpanded, setProcessListExpanded] = useState(true)
-  const [advancedConfigExpanded, setAdvancedConfigExpanded] = useState(false)
+  const [advancedConfigExpanded, setAdvancedConfigExpanded] = useState(true)
   const [showExplanation, setShowExplanation] = useState(true)
 
   // Check server health on component mount

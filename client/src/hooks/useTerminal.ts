@@ -19,6 +19,13 @@ export const useTerminal = () => {
   const [systemCalls, setSystemCalls] = useState<SystemCall[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const terminalRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const focusInput = useCallback(() => {
+    if (inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, []);
 
   const scrollToBottom = useCallback(() => {
     if (terminalRef.current) {
@@ -213,7 +220,7 @@ export const useTerminal = () => {
 
         addToHistory(
           "system",
-          'OS Terminal initialized. Type "help" for available commands.',
+          'LearnOS Terminal initialized. Type "help" for available commands.',
           undefined
         );
       } catch (error) {
@@ -237,5 +244,7 @@ export const useTerminal = () => {
     executeCommand,
     clearTerminal,
     resetSystem,
+    inputRef,
+    focusInput,
   };
 };
