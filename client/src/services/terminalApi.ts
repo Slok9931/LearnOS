@@ -1,20 +1,31 @@
-import { API_CONFIG } from './../config/api';
-import { TerminalResponse } from '@/types/terminal'
+import { API_CONFIG, DEFAULT_HEADERS } from "@/config/api"
+
+export interface TerminalResponse {
+  output: string
+  error?: string
+  processes?: any[]
+  trap_info?: {
+    trap_type?: string
+    description?: string
+    trap_table?: any[]
+    recent_calls?: any[]
+  }
+  system_calls?: any[]
+}
 
 class TerminalApi {
   private baseUrl = API_CONFIG.BASE_URL
 
   async executeCommand(command: string, args: string[] = []): Promise<TerminalResponse> {
-    const response = await fetch(`${this.baseUrl}/api/terminal/execute`, {
+    const response = await fetch(`${this.baseUrl}${API_CONFIG.ENDPOINTS.TERMINAL.EXECUTE}`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: DEFAULT_HEADERS,
       body: JSON.stringify({ command, args }),
     })
 
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`)
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(errorData.detail || `HTTP error! status: ${response.status}`)
     }
 
     const result = await response.json()
@@ -26,10 +37,13 @@ class TerminalApi {
   }
 
   async getProcesses() {
-    const response = await fetch(`${this.baseUrl}/api/terminal/processes`)
+    const response = await fetch(`${this.baseUrl}${API_CONFIG.ENDPOINTS.TERMINAL.PROCESSES}`, {
+      headers: DEFAULT_HEADERS,
+    })
     
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`)
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(errorData.detail || `HTTP error! status: ${response.status}`)
     }
 
     const result = await response.json()
@@ -41,10 +55,13 @@ class TerminalApi {
   }
 
   async getTrapTable() {
-    const response = await fetch(`${this.baseUrl}/api/terminal/trap-table`)
+    const response = await fetch(`${this.baseUrl}${API_CONFIG.ENDPOINTS.TERMINAL.TRAP_TABLE}`, {
+      headers: DEFAULT_HEADERS,
+    })
     
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`)
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(errorData.detail || `HTTP error! status: ${response.status}`)
     }
 
     const result = await response.json()
@@ -55,28 +72,15 @@ class TerminalApi {
     return result.data
   }
 
-  async getSystemCalls() {
-    const response = await fetch(`${this.baseUrl}/api/terminal/system-calls`)
-    
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`)
-    }
-
-    const result = await response.json()
-    if (!result.success) {
-      throw new Error(result.message || 'Failed to get system calls')
-    }
-
-    return result.data
-  }
-
   async resetSystem() {
-    const response = await fetch(`${this.baseUrl}/api/terminal/reset`, {
+    const response = await fetch(`${this.baseUrl}${API_CONFIG.ENDPOINTS.TERMINAL.RESET}`, {
       method: 'POST',
+      headers: DEFAULT_HEADERS,
     })
     
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`)
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(errorData.detail || `HTTP error! status: ${response.status}`)
     }
 
     const result = await response.json()
@@ -88,5 +92,8 @@ class TerminalApi {
   }
 }
 
-const terminalApi = new TerminalApi()
+export const terminalApi = new TerminalApi()
 export default terminalApi
+
+// Export the executeCommand function for direct use
+export const executeTerminalCommand = terminalApi.executeCommand.bind(terminalApi)

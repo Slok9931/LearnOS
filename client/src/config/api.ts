@@ -2,8 +2,8 @@
 // Edit this file to change API endpoints and configuration
 
 export const API_CONFIG = {
-  BASE_URL: "https://learnos-server.onrender.com",
-  // BASE_URL: "http://localhost:5000",
+  // BASE_URL: "https://learnos-server.onrender.com",
+  BASE_URL: "http://localhost:5000",
   ENDPOINTS: {
     CPU_SCHEDULING: {
       FCFS: "/api/cpu/fcfs",
@@ -11,6 +11,12 @@ export const API_CONFIG = {
       PRIORITY: "/api/cpu/priority",
       ROUND_ROBIN: "/api/cpu/round-robin",
       MLFQ: "/api/cpu/mlfq",
+    },
+    TERMINAL: {
+      EXECUTE: "/api/terminal/execute",
+      PROCESSES: "/api/terminal/processes",
+      TRAP_TABLE: "/api/terminal/trap-table",
+      RESET: "/api/terminal/reset",
     },
     // Future OS endpoints can be added here
     MEMORY: {

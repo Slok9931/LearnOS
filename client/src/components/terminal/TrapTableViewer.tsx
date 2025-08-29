@@ -1,5 +1,6 @@
-import React from 'react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import React, { useEffect, useState } from 'react'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
@@ -7,19 +8,37 @@ import {
   Shield, 
   Zap,
   Clock,
-  AlertTriangle
+  AlertTriangle,
+  RefreshCw
 } from 'lucide-react'
-import { TrapTableEntry, SystemCall } from '@/types/terminal'
+import { terminalApi } from '@/services/terminalApi'
+import type { TrapTableEntry, SystemCall } from '@/types/terminal'
 
-interface TrapTableViewerProps {
-  trapTable: TrapTableEntry[]
-  systemCalls: SystemCall[]
-}
+export const TrapTableViewer: React.FC = () => {
+  const [trapTable, setTrapTable] = useState<TrapTableEntry[]>([])
+  const [systemCalls, setSystemCalls] = useState<SystemCall[]>([])
+  const [isLoading, setIsLoading] = useState(false)
 
-export const TrapTableViewer: React.FC<TrapTableViewerProps> = ({ 
-  trapTable, 
-  systemCalls 
-}) => {
+  const loadTrapData = async () => {
+    setIsLoading(true)
+    try {
+      const data = await terminalApi.getTrapTable()
+      setTrapTable(data.trap_table || [])
+      setSystemCalls(data.system_calls || [])
+    } catch (error) {
+      console.error('Failed to load trap data:', error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadTrapData()
+    // Auto-refresh every 3 seconds
+    const interval = setInterval(loadTrapData, 3000)
+    return () => clearInterval(interval)
+  }, [])
+
   const getTrapIcon = (trapType: string) => {
     switch (trapType) {
       case 'system_call':
@@ -34,91 +53,92 @@ export const TrapTableViewer: React.FC<TrapTableViewerProps> = ({
   }
 
   const formatTimestamp = (timestamp: number) => {
-    return new Date(timestamp * 1000).toLocaleTimeString()
+    return new Date(timestamp * 1000).toLocaleTimeString('en-US', {
+      hour12: false,
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
+    })
   }
 
   return (
-    <Card className="bg-card border-border">
-      <CardHeader>
-        <div className="flex items-center gap-3">
-          <Shield className="h-5 w-5 text-primary" />
-          <div>
-            <CardTitle>Trap Table & System Calls</CardTitle>
-            <CardDescription>
-              Trap handlers and recent system calls
-            </CardDescription>
-          </div>
-        </div>
-      </CardHeader>
-
-      <CardContent className="space-y-4">
-        {/* Trap Table */}
-        <div className="space-y-2">
-          <h4 className="text-sm font-medium text-foreground">Trap Handlers</h4>
-          <div className="space-y-1">
-            {trapTable.map((entry, index) => (
-              <div
-                key={index}
-                className="flex items-start gap-2 p-2 rounded border border-border/50 bg-muted/20"
-              >
-                {getTrapIcon(entry.trap_type)}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-medium">
-                      {entry.trap_type.replace('_', ' ').toUpperCase()}
-                    </span>
-                    <Badge variant="outline" className="text-xs">
-                      {entry.handler_address}
-                    </Badge>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    {entry.description}
-                  </p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <Separator />
-
-        {/* Recent System Calls */}
-        <div className="space-y-2">
-          <h4 className="text-sm font-medium text-foreground">Recent System Calls</h4>
-          <ScrollArea className="h-32">
-            <div className="space-y-1">
-              {systemCalls.length === 0 ? (
-                <div className="text-center py-4 text-xs text-muted-foreground">
-                  No system calls yet
-                </div>
-              ) : (
-                systemCalls.slice().reverse().map((call, index) => (
-                  <div
-                    key={index}
-                    className="flex items-center justify-between p-2 rounded bg-muted/20"
-                  >
-                    <div className="flex items-center gap-2">
-                      <Zap className="w-3 h-3 text-blue-400" />
-                      <span className="text-xs font-mono">
-                        {call.name}({call.args.join(', ')})
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Badge variant="outline" className="text-xs">
-                        PID {call.pid}
-                      </Badge>
-                      <span className="text-xs text-muted-foreground">
-                        {formatTimestamp(call.timestamp)}
-                      </span>
-                    </div>
-                  </div>
-                ))
-              )}
+    <div className="space-y-4">
+      {/* Trap Table */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardTitle className="text-sm font-medium">Trap Table</CardTitle>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={loadTrapData}
+            disabled={isLoading}
+            className="h-8 w-8 p-0"
+          >
+            <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+          </Button>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          {trapTable.length === 0 ? (
+            <div className="text-center text-gray-500 py-2">
+              No trap table data
             </div>
-          </ScrollArea>
-        </div>
-      </CardContent>
-    </Card>
+          ) : (
+            <div className="space-y-2">
+              {trapTable.map((entry, index) => (
+                <div
+                  key={index}
+                  className="flex items-center justify-between p-2 border rounded-lg text-sm"
+                >
+                  <div>
+                    <div className="font-medium">{entry.trap_type.replace('_', ' ').toUpperCase()}</div>
+                    <div className="text-xs text-gray-500">{entry.description}</div>
+                  </div>
+                  <div className="text-xs font-mono text-gray-600">
+                    {entry.handler_address}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Recent System Calls */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm font-medium">Recent System Calls</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2 max-h-64 overflow-y-auto">
+          {systemCalls.length === 0 ? (
+            <div className="text-center text-gray-500 py-2">
+              No recent system calls
+            </div>
+          ) : (
+            <div className="space-y-1">
+              {systemCalls.slice().reverse().map((call, index) => (
+                <div
+                  key={index}
+                  className="flex items-center justify-between p-2 border rounded text-xs"
+                >
+                  <div className="flex items-center space-x-3">
+                    <span className="font-medium">{call.name}</span>
+                    <span className="text-gray-500">
+                      PID {call.pid}
+                    </span>
+                    <span className="text-gray-400">
+                      [{call.args.join(', ')}]
+                    </span>
+                  </div>
+                  <span className="text-gray-500 font-mono">
+                    {formatTimestamp(call.timestamp)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
   )
 }
 

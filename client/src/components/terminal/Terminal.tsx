@@ -36,6 +36,7 @@ export const Terminal: React.FC = () => {
     }
   }, [history])
 
+  // Focus input when terminal is clicked
   const handleTerminalClick = () => {
     if (inputRef.current) {
       inputRef.current.focus()
@@ -176,7 +177,7 @@ export const Terminal: React.FC = () => {
                   {(entry.output || entry.error) && (
                     <div className="mt-1 ml-0">
                       {entry.error ? (
-                        <div className="text-red-400 whitespace-pre-wrap">
+                        <div className="text-red-400 whitespace-pre-wrap text-start">
                           {entry.error}
                         </div>
                       ) : (
@@ -191,7 +192,7 @@ export const Terminal: React.FC = () => {
               
               {/* Current Command Input */}
               <div className="flex items-center">
-                <span className="text-blue-400 mr-1">user@learnus:</span>
+                <span className="text-blue-400 mr-1">user@learnOS:</span>
                 <span className="text-blue-300 mr-1">~$</span>
                 <div className="flex-1 relative">
                   <input
@@ -232,6 +233,13 @@ export const Terminal: React.FC = () => {
                   className="text-green-400 hover:text-green-300 underline"
                 >
                   ps
+                </button>
+                <span>|</span>
+                <button 
+                  onClick={() => setCurrentCommand('ls')}
+                  className="text-cyan-400 hover:text-cyan-300 underline"
+                >
+                  ls
                 </button>
                 <span>|</span>
                 <button 

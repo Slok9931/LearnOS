@@ -1,16 +1,14 @@
-from pydantic import BaseModel
-from typing import Optional, List, Dict, Any
 from enum import Enum
-import time
+from typing import List, Optional
+from pydantic import BaseModel
 
-class ProcessState(str, Enum):
+class ProcessState(Enum):
     READY = "ready"
     RUNNING = "running"
     BLOCKED = "blocked"
     TERMINATED = "terminated"
-    ZOMBIE = "zombie"
 
-class TrapType(str, Enum):
+class TrapType(Enum):
     SYSTEM_CALL = "system_call"
     TIMER_INTERRUPT = "timer_interrupt"
     PAGE_FAULT = "page_fault"
@@ -22,7 +20,7 @@ class Process(BaseModel):
     ppid: Optional[int] = None
     name: str
     state: ProcessState
-    priority: int = 0
+    priority: int
     start_time: float
     cpu_time: float = 0.0
     memory_usage: int = 0
@@ -30,24 +28,20 @@ class Process(BaseModel):
     exit_code: Optional[int] = None
     children: List[int] = []
 
+class SystemCall(BaseModel):
+    name: str
+    args: List[str]
+    timestamp: float
+    pid: int
+
 class TrapTableEntry(BaseModel):
     trap_type: TrapType
     handler_address: str
     description: str
 
-class SystemCall(BaseModel):
-    name: str
-    pid: int
-    args: List[str]
-    timestamp: float
-
 class TerminalCommand(BaseModel):
     command: str
     args: List[str] = []
-
-class TerminalResponse(BaseModel):
-    output: str
+    timestamp: float
+    output: str = ""
     error: Optional[str] = None
-    processes: List[Process] = []
-    trap_info: Optional[Dict[str, Any]] = None
-    system_calls: List[SystemCall] = []
