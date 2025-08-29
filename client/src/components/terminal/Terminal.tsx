@@ -92,7 +92,7 @@ export const Terminal: React.FC = () => {
     <div className={`mx-auto transition-all duration-300 ${
       isFullScreen 
         ? 'fixed inset-0 z-50 w-full h-full' 
-        : 'w-full max-w-6xl'
+        : 'w-full'
     }`}>
       {/* Terminal Window */}
       <Card className={`bg-gray-900 border border-gray-700 shadow-2xl overflow-hidden transition-all duration-300 ${
