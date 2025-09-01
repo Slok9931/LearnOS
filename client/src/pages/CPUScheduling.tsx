@@ -39,9 +39,17 @@ interface MLFQConfig {
   feedback_mechanism: 'time' | 'io' | 'both'
 }
 
+interface CFSConfig {
+  target_latency: number
+  min_granularity: number
+  nice_levels: boolean
+  load_balancing: boolean
+  sleeper_fairness: boolean
+}
+
 export default function CPUScheduling() {
   const [processes, setProcesses] = useState<Process[]>([
-    { id: 1, arrival_time: 0, burst_time: 5, priority: 0 }  // Changed from 1 to 0
+    { id: 1, arrival_time: 0, burst_time: 5, priority: 0 }
   ])
   
   // Basic algorithm parameters
@@ -57,6 +65,15 @@ export default function CPUScheduling() {
     boost_interval: 100,
     priority_boost: true,
     feedback_mechanism: 'time'
+  })
+  
+  // CFS Configuration
+  const [cfsConfig, setCfsConfig] = useState<CFSConfig>({
+    target_latency: 20,
+    min_granularity: 1,
+    nice_levels: true,
+    load_balancing: true,
+    sleeper_fairness: true
   })
   
   // Round Robin variations
@@ -124,12 +141,12 @@ export default function CPUScheduling() {
 
   const addProcess = () => {
     const newId = Math.max(...processes.map(p => p.id), 0) + 1
-    setProcesses([...processes, { id: newId, arrival_time: 0, burst_time: 1, priority: 0 }])  // Changed from 1 to 0
+    setProcesses([...processes, { id: newId, arrival_time: 0, burst_time: 1, priority: 0 }])
   }
 
   const addSampleProcesses = () => {
     const sampleProcesses: Process[] = [
-      { id: 1, arrival_time: 0, burst_time: 6, priority: 0 },  // Changed from 1 to 0
+      { id: 1, arrival_time: 0, burst_time: 6, priority: 0 },
       { id: 2, arrival_time: 1, burst_time: 8, priority: 2 },
       { id: 3, arrival_time: 2, burst_time: 7, priority: 0 },
       { id: 4, arrival_time: 3, burst_time: 3, priority: 3 },
@@ -143,7 +160,7 @@ export default function CPUScheduling() {
       ...p,
       arrival_time: Math.floor(Math.random() * 5),
       burst_time: Math.floor(Math.random() * 10) + 1,
-      priority: Math.floor(Math.random() * 4)  // This generates 0-3, which is correct
+      priority: Math.floor(Math.random() * 4)
     }))
     setProcesses(shuffled)
   }
@@ -176,13 +193,13 @@ export default function CPUScheduling() {
         setError(`Process ${process.id}: Arrival time cannot be negative`)
         return false
       }
-      if ((activeAlgorithm === 'priority' || activeAlgorithm === 'mlfq') && 
+      if ((activeAlgorithm === 'priority' || activeAlgorithm === 'mlfq' || activeAlgorithm === 'cfs') && 
           (process.priority === undefined || process.priority === null || process.priority < 0)) {
         setError(`Process ${process.id}: Priority must be specified and non-negative (0 = highest priority) for ${activeAlgorithm} scheduling`)
         return false
       }
     }
-    setError(null)  // Clear any existing errors if validation passes
+    setError(null)
     return true
   }
 
@@ -203,7 +220,7 @@ export default function CPUScheduling() {
       const request: SchedulingRequest = {
         processes: processes.map(p => ({
           ...p,
-          priority: p.priority !== undefined ? p.priority : 0  // Ensure priority is always set
+          priority: p.priority !== undefined ? p.priority : 0
         })),
         context_switch_cost: contextSwitchCost,
       }
@@ -217,7 +234,6 @@ export default function CPUScheduling() {
         }
         request.time_quantum = timeQuantum
         
-        // Add Round Robin variation support
         if (rrVariation === 'weighted') {
           request.process_weights = processWeights
         }
@@ -227,7 +243,6 @@ export default function CPUScheduling() {
       if (algorithm === 'sjf' || algorithm === 'priority') {
         request.preemptive = preemptive
         
-        // Add priority-specific options
         if (algorithm === 'priority') {
           request.priority_type = priorityType
           request.priority_inversion_handling = priorityInversion
@@ -242,13 +257,27 @@ export default function CPUScheduling() {
         }
         request.mlfq_config = {
           ...mlfqConfig,
-          // Ensure all MLFQ config is properly sent
           num_queues: mlfqConfig.num_queues,
           time_quantums: mlfqConfig.time_quantums,
           aging_threshold: mlfqConfig.aging_threshold,
           boost_interval: mlfqConfig.boost_interval,
           priority_boost: mlfqConfig.priority_boost,
           feedback_mechanism: mlfqConfig.feedback_mechanism
+        }
+      }
+
+      if (algorithm === 'cfs') {
+        if (cfsConfig.target_latency <= 0 || cfsConfig.min_granularity <= 0) {
+          setError('Target latency and minimum granularity must be greater than 0 for CFS scheduling')
+          setLoading(false)
+          return
+        }
+        request.cfs_config = {
+          target_latency: cfsConfig.target_latency,
+          min_granularity: cfsConfig.min_granularity,
+          nice_levels: cfsConfig.nice_levels,
+          load_balancing: cfsConfig.load_balancing,
+          sleeper_fairness: cfsConfig.sleeper_fairness
         }
       }
 
@@ -269,6 +298,9 @@ export default function CPUScheduling() {
         case 'mlfq':
           result = await schedulingApi.mlfq(request)
           break
+        case 'cfs':
+          result = await schedulingApi.cfs(request)
+          break
         default:
           throw new Error(`Algorithm ${algorithm} not implemented`)
       }
@@ -280,7 +312,8 @@ export default function CPUScheduling() {
         }
 
         if (!result.data.processes || result.data.processes.length === 0) {
-          setError('No process data received from server')
+          setError('No process data received from server. Check server logs for details.')
+          console.error('Empty processes array:', result.data)
           return
         }
 
@@ -455,10 +488,10 @@ export default function CPUScheduling() {
                           </div>
                         </div>
                         
-                        {(activeAlgorithm === 'priority' || activeAlgorithm === 'mlfq') && (
+                        {(activeAlgorithm === 'priority' || activeAlgorithm === 'mlfq' || activeAlgorithm === 'cfs') && (
                           <div>
                             <Label htmlFor={`priority-${process.id}`} className="text-xs text-muted-foreground">
-                              Priority (0 = highest)
+                              {activeAlgorithm === 'cfs' ? 'Nice Value (0 = normal)' : 'Priority (0 = highest)'}
                             </Label>
                             <Input
                               id={`priority-${process.id}`}
@@ -522,12 +555,13 @@ export default function CPUScheduling() {
             <CardContent className="space-y-6">
               {/* Algorithm Selection */}
               <Tabs value={activeAlgorithm} onValueChange={setActiveAlgorithm} className="w-full">
-                <TabsList className="grid w-full grid-cols-5 bg-muted">
+                <TabsList className="grid w-full grid-cols-6 bg-muted">
                   <TabsTrigger value="fcfs" className="text-xs sm:text-sm">FCFS</TabsTrigger>
                   <TabsTrigger value="sjf" className="text-xs sm:text-sm">SJF</TabsTrigger>
                   <TabsTrigger value="priority" className="text-xs sm:text-sm">Priority</TabsTrigger>
                   <TabsTrigger value="round-robin" className="text-xs sm:text-sm">Round Robin</TabsTrigger>
                   <TabsTrigger value="mlfq" className="text-xs sm:text-sm">MLFQ</TabsTrigger>
+                  <TabsTrigger value="cfs" className="text-xs sm:text-sm">CFS</TabsTrigger>
                 </TabsList>
 
                 {/* FCFS Configuration */}
@@ -847,8 +881,116 @@ export default function CPUScheduling() {
                   </div>
                 </TabsContent>
 
+                {/* CFS Configuration */}
+                <TabsContent value="cfs" className="mt-4">
+                  <div className="p-4 bg-muted/30 rounded-lg border border-border/50">
+                    <div className="space-y-6">
+                      <div>
+                        <h3 className="font-medium text-foreground">Completely Fair Scheduler (CFS)</h3>
+                        <p className="text-sm text-muted-foreground">Linux's default scheduler that ensures fair CPU time distribution based on virtual runtime</p>
+                      </div>
+                      
+                      {/* Basic CFS Settings */}
+                      <div className="grid md:grid-cols-2 gap-4">
+                        <div>
+                          <Label className="text-sm font-medium text-foreground">Target Latency (ms)</Label>
+                          <Input
+                            type="number"
+                            min="1"
+                            value={cfsConfig.target_latency}
+                            onChange={(e) => setCfsConfig(prev => ({
+                              ...prev,
+                              target_latency: parseInt(e.target.value) || 20
+                            }))}
+                            className="mt-1"
+                          />
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Target time for all runnable processes to run at least once
+                          </p>
+                        </div>
+                        <div>
+                          <Label className="text-sm font-medium text-foreground">Minimum Granularity (ms)</Label>
+                          <Input
+                            type="number"
+                            min="0.1"
+                            step="0.1"
+                            value={cfsConfig.min_granularity}
+                            onChange={(e) => setCfsConfig(prev => ({
+                              ...prev,
+                              min_granularity: parseFloat(e.target.value) || 1
+                            }))}
+                            className="mt-1"
+                          />
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Minimum time slice to prevent excessive context switching
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* CFS Feature Toggles */}
+                      <div className="space-y-4 flex justify-between">
+                        <div className="flex items-center space-x-2">
+                          <Switch
+                            id="cfs-nice-levels"
+                            checked={cfsConfig.nice_levels}
+                            onCheckedChange={(checked) => setCfsConfig(prev => ({
+                              ...prev,
+                              nice_levels: checked
+                            }))}
+                          />
+                          <Label htmlFor="cfs-nice-levels" className="text-sm">
+                            Enable Nice Level Support
+                          </Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <Switch
+                            id="cfs-load-balancing"
+                            checked={cfsConfig.load_balancing}
+                            onCheckedChange={(checked) => setCfsConfig(prev => ({
+                              ...prev,
+                              load_balancing: checked
+                            }))}
+                          />
+                          <Label htmlFor="cfs-load-balancing" className="text-sm">
+                            Enable Load Balancing
+                          </Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <Switch
+                            id="cfs-sleeper-fairness"
+                            checked={cfsConfig.sleeper_fairness}
+                            onCheckedChange={(checked) => setCfsConfig(prev => ({
+                              ...prev,
+                              sleeper_fairness: checked
+                            }))}
+                          />
+                          <Label htmlFor="cfs-sleeper-fairness" className="text-sm">
+                            Enable Sleeper Fairness
+                          </Label>
+                        </div>
+                      </div>
+
+                      {advancedConfigExpanded && (
+                        <div className="pt-4 border-t border-border/50">
+                          <div>
+                            <Label className="text-sm font-medium text-foreground">Context Switch Cost</Label>
+                            <Input
+                              type="number"
+                              min="0"
+                              step="0.1"
+                              value={contextSwitchCost}
+                              onChange={(e) => setContextSwitchCost(parseFloat(e.target.value) || 0)}
+                              className="mt-1"
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </TabsContent>
+
                 {/* Run Button for Each Algorithm */}
-                {['fcfs', 'sjf', 'priority', 'round-robin', 'mlfq'].map((algorithm) => (
+                {['fcfs', 'sjf', 'priority', 'round-robin', 'mlfq', 'cfs'].map((algorithm) => (
                   <TabsContent key={`${algorithm}-run`} value={algorithm}>
                     <div className="flex justify-center pt-4">
                       <Button
@@ -916,6 +1058,7 @@ export default function CPUScheduling() {
                     contextSwitchCost,
                     preemptive,
                     mlfqConfig,
+                    cfsConfig,
                     rrVariation,
                     processWeights,
                     priorityType,
@@ -949,15 +1092,4 @@ export default function CPUScheduling() {
       </div>
     </div>
   )
-}
-
-function getAlgorithmDescription(algorithm: string): string {
-  const descriptions = {
-    'fcfs': 'Processes executed in order of arrival',
-    'sjf': 'Shortest burst time executes first',
-    'priority': 'Executes based on priority levels (0 = highest)',
-    'round-robin': 'Equal time slices in cyclic order',
-    'mlfq': 'Dynamic multi-level priority queues'
-  }
-  return descriptions[algorithm as keyof typeof descriptions] || ''
 }

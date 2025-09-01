@@ -11,6 +11,7 @@ export const API_CONFIG = {
       PRIORITY: "/api/cpu/priority",
       ROUND_ROBIN: "/api/cpu/round-robin",
       MLFQ: "/api/cpu/mlfq",
+      CFS: "/api/cpu/cfs",
     },
     TERMINAL: {
       EXECUTE: "/api/terminal/execute",

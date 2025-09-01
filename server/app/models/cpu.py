@@ -16,6 +16,13 @@ class MLFQConfig(BaseModel):
     priority_boost: bool = True
     feedback_mechanism: Literal['time', 'io', 'both'] = 'time'
 
+class CFSConfig(BaseModel):
+    target_latency: int = 20
+    min_granularity: int = 1
+    nice_levels: bool = True
+    load_balancing: bool = True
+    sleeper_fairness: bool = True
+
 class SchedulingRequest(BaseModel):
     processes: List[Process]
     time_quantum: Optional[int] = None
@@ -29,6 +36,7 @@ class SchedulingRequest(BaseModel):
     priority_inversion_handling: bool = False
     
     mlfq_config: Optional[MLFQConfig] = None
+    cfs_config: Optional[CFSConfig] = None
 
 class ScheduleEntry(BaseModel):
     process_id: int
@@ -62,20 +70,31 @@ class SchedulingResult(BaseModel):
     metrics: SchedulingMetrics
     algorithm: str
 
-class CFSProcess(Process):
+class CFSProcess(BaseModel):
     """CFS-specific process with virtual runtime"""
-    vruntime: float = 0.0  # Virtual runtime
-    nice_value: int = 0    # Nice value (-20 to 19)
-    weight: int = 1024     # Weight based on nice value
+    pid: int
+    arrival_time: float
+    burst_time: float
+    priority: int = 0
+    nice_value: int = 0
+    weight: float = 1024.0
+    vruntime: float = 0.0
+    remaining_time: float = 0.0
+    start_time: Optional[float] = None
+    completion_time: Optional[float] = None
+    waiting_time: float = 0.0
+    turnaround_time: float = 0.0
+    response_time: Optional[float] = None
     
     def __init__(self, **data):
         super().__init__(**data)
-        if 'nice_value' in data:
-            self.weight = self.calculate_weight(data['nice_value'])
+        if hasattr(self, 'nice_value'):
+            self.weight = self.calculate_weight(self.nice_value)
+        if not hasattr(self, 'remaining_time') or self.remaining_time == 0:
+            self.remaining_time = self.burst_time
     
-    def calculate_weight(self, nice: int) -> int:
+    def calculate_weight(self, nice: int) -> float:
         """Calculate weight based on nice value"""
-        # Standard Linux CFS weight calculation
         weights = {
             -20: 88761, -19: 71755, -18: 56483, -17: 46273, -16: 36291,
             -15: 29154, -14: 23254, -13: 18705, -12: 14949, -11: 11916,
@@ -86,13 +105,14 @@ class CFSProcess(Process):
             10: 110, 11: 87, 12: 70, 13: 56, 14: 45,
             15: 36, 16: 29, 17: 23, 18: 18, 19: 15
         }
-        return weights.get(nice, 1024)
+        return float(weights.get(nice, 1024))
 
 class CFSRequest(BaseModel):
     """Request model for CFS scheduling"""
     processes: List[CFSProcess]
-    time_slice: int = 6
+    target_latency: int = 20
     min_granularity: int = 1
+    context_switch_cost: float = 0.5
     
 class CFSResult(BaseModel):
     """Result model for CFS scheduling"""

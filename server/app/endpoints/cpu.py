@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException
-from app.models.cpu import SchedulingRequest, CFSRequest
-from app.models.response import APIResponse, SchedulingResponse
-from app.services.cpu import cpu_service, CFSScheduler
+from app.models.cpu import SchedulingRequest
+from app.models.response import APIResponse
+from app.services.cpu import cpu_service
 
 router = APIRouter()
 
@@ -45,8 +45,8 @@ async def mlfq(request: SchedulingRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     
-@router.post("/api/cpu/cfs", response_model=SchedulingResponse)
-async def cfs_scheduling(request: CFSRequest):
+@router.post("/api/cpu/cfs")
+async def cfs_scheduling(request: SchedulingRequest):
     """
     Completely Fair Scheduler (CFS) algorithm endpoint
     
@@ -67,27 +67,25 @@ async def cfs_scheduling(request: CFSRequest):
             if process.burst_time <= 0:
                 raise HTTPException(
                     status_code=400, 
-                    detail=f"Process {process.pid} has invalid burst time"
+                    detail=f"Process {process.id} has invalid burst time"
                 )
             if process.arrival_time < 0:
                 raise HTTPException(
                     status_code=400, 
-                    detail=f"Process {process.pid} has invalid arrival time"
+                    detail=f"Process {process.id} has invalid arrival time"
                 )
-            if not (-20 <= process.nice_value <= 19):
-                raise HTTPException(
-                    status_code=400, 
-                    detail=f"Process {process.pid} has invalid nice value. Must be between -20 and 19"
-                )
+            if not (-20 <= process.priority <= 19):
+                if process.priority < -20:
+                    process.priority = -20
+                elif process.priority > 19:
+                    process.priority = 19
         
-        scheduler = CFSScheduler()
-        result = scheduler.schedule(request)
+        result = cpu_service.cfs(request)
         
-        return SchedulingResponse(
+        return APIResponse(
             success=True,
             message="CFS scheduling completed successfully",
-            data=result.dict(),
-            algorithm="CFS"
+            data=result
         )
         
     except HTTPException:

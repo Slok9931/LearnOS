@@ -2,7 +2,7 @@ import heapq
 from typing import List, Dict, Optional
 from app.models.cpu import (
     ScheduleEntry, ProcessResult, SchedulingMetrics, 
-    SchedulingResult, SchedulingRequest, MLFQConfig, CFSRequest, CFSResult
+    SchedulingResult, SchedulingRequest, MLFQConfig, CFSRequest, CFSResult, CFSProcess
 )
 
 class CPUSchedulingService:
@@ -874,6 +874,132 @@ class CPUSchedulingService:
             algorithm="Round Robin (Deficit)"
         )
 
+    def cfs(self, request: SchedulingRequest) -> SchedulingResult:
+        """CFS scheduling implementation"""
+        self.context_switch_cost = request.context_switch_cost
+        self.context_switches = 0
+        
+        cfs_processes = []
+        for p in request.processes:
+            cfs_process = CFSProcess(
+                pid=p.id,
+                arrival_time=p.arrival_time,
+                burst_time=p.burst_time,
+                priority=p.priority,
+                nice_value=p.priority,
+                remaining_time=p.burst_time
+            )
+            cfs_processes.append(cfs_process)
+        
+        cfs_config = request.cfs_config
+        target_latency = cfs_config.target_latency if cfs_config else 20
+        min_granularity = cfs_config.min_granularity if cfs_config else 1
+        
+        scheduler = CFSScheduler()
+        cfs_request = CFSRequest(
+            processes=cfs_processes,
+            target_latency=target_latency,
+            min_granularity=min_granularity,
+            context_switch_cost=self.context_switch_cost
+        )
+        
+        cfs_result = scheduler.schedule(cfs_request)
+        
+        schedule = []
+        results = []
+        
+        for entry in cfs_result.execution_order:
+            schedule.append(ScheduleEntry(
+                process_id=entry['process_id'],
+                start_time=entry['start_time'],
+                end_time=entry['start_time'] + entry['duration'],
+                type="execution"
+            ))
+        
+        process_completion_data = {}
+        
+        for entry in cfs_result.execution_order:
+            pid = entry['process_id']
+            end_time = entry['start_time'] + entry['duration']
+            
+            if pid not in process_completion_data:
+                original_process = None
+                for p in request.processes:
+                    if p.id == pid:
+                        original_process = p
+                        break
+                
+                if original_process:
+                    process_completion_data[pid] = {
+                        'original_process': original_process,
+                        'completion_time': end_time,
+                        'first_start_time': entry['start_time']
+                    }
+            else:
+                process_completion_data[pid]['completion_time'] = end_time
+                if entry['start_time'] < process_completion_data[pid]['first_start_time']:
+                    process_completion_data[pid]['first_start_time'] = entry['start_time']
+        
+        for pid, data in process_completion_data.items():
+            original_process = data['original_process']
+            completion_time = data['completion_time']
+            first_start_time = data['first_start_time']
+            
+            turnaround_time = completion_time - original_process.arrival_time
+            response_time = first_start_time - original_process.arrival_time
+            
+            total_execution_time = 0
+            for entry in cfs_result.execution_order:
+                if entry['process_id'] == pid:
+                    total_execution_time += entry['duration']
+            
+            waiting_time = turnaround_time - total_execution_time
+            
+            results.append(ProcessResult(
+                pid=pid,
+                arrival_time=original_process.arrival_time,
+                burst_time=original_process.burst_time,
+                priority=original_process.priority,
+                completion_time=completion_time,
+                turnaround_time=turnaround_time,
+                waiting_time=max(0, waiting_time),
+                response_time=max(0, response_time)
+            ))
+        
+        if results:
+            avg_waiting = sum(p.waiting_time for p in results) / len(results)
+            avg_turnaround = sum(p.turnaround_time for p in results) / len(results)
+            avg_response = sum(p.response_time or 0 for p in results) / len(results)
+            total_burst = sum(p.burst_time for p in results)
+            total_time = max(p.completion_time for p in results) if results else 0
+            
+            metrics = SchedulingMetrics(
+                average_waiting_time=avg_waiting,
+                average_turnaround_time=avg_turnaround,
+                average_response_time=avg_response,
+                cpu_utilization=(total_burst / total_time * 100) if total_time > 0 else 0,
+                throughput=len(results) / total_time if total_time > 0 else 0,
+                context_switches=cfs_result.statistics.get('context_switches', 0),
+                total_time=total_time
+            )
+        else:
+            metrics = SchedulingMetrics(
+                average_waiting_time=0,
+                average_turnaround_time=0,
+                average_response_time=0,
+                cpu_utilization=0,
+                throughput=0,
+                context_switches=0,
+                total_time=0
+            )
+        
+        return SchedulingResult(
+            processes=results,
+            schedule=schedule,
+            metrics=metrics,
+            algorithm="CFS (Completely Fair Scheduler)"
+        )
+
     def _calculate_metrics(self, results: List[ProcessResult], total_time: float) -> SchedulingMetrics:
         """Calculate scheduling metrics - CORRECTED CPU utilization"""
         if not results:
@@ -908,57 +1034,53 @@ class CFSScheduler:
     """Completely Fair Scheduler implementation"""
     
     def __init__(self):
-        self.current_time = 0
-        self.total_weight = 0
+        self.current_time = 0.0
         self.min_vruntime = 0.0
         
     def schedule(self, request: CFSRequest) -> CFSResult:
         """Execute CFS scheduling algorithm"""
-        processes = [p.copy() for p in request.processes]
-        
-        # Initialize processes
-        for process in processes:
-            if process.arrival_time == 0:
-                process.vruntime = self.min_vruntime
-            process.remaining_time = process.burst_time
-            process.start_time = None
-            process.completion_time = None
-            process.waiting_time = 0
-            process.turnaround_time = 0
-            process.response_time = None
+        processes = []
+        for p in request.processes:
+            process_copy = CFSProcess(
+                pid=p.pid,
+                arrival_time=p.arrival_time,
+                burst_time=p.burst_time,
+                priority=p.priority,
+                nice_value=p.nice_value,
+                remaining_time=p.burst_time,
+                vruntime=0.0,
+                waiting_time=0.0,
+                turnaround_time=0.0
+            )
+            processes.append(process_copy)
         
         execution_order = []
         gantt_chart = []
         timeline = []
         red_black_tree_states = []
         
-        # Red-black tree simulation (using min-heap for simplicity)
-        ready_queue = []  # Min-heap based on vruntime
-        self.current_time = 0
+        ready_queue = []
+        self.current_time = 0.0
         
         while processes or ready_queue:
-            # Add arriving processes to ready queue
             arrived = []
             for process in processes[:]:
                 if process.arrival_time <= self.current_time:
                     if process.vruntime == 0:
-                        process.vruntime = max(self.min_vruntime, 0)
+                        process.vruntime = max(self.min_vruntime, 0.0)
                     heapq.heappush(ready_queue, (process.vruntime, process.pid, process))
                     arrived.append(process)
                     processes.remove(process)
             
             if not ready_queue:
                 if processes:
-                    # Jump to next arrival
                     self.current_time = min(p.arrival_time for p in processes)
                     continue
                 else:
                     break
             
-            # Get process with minimum vruntime
             vruntime, pid, current_process = heapq.heappop(ready_queue)
             
-            # Record red-black tree state
             tree_state = {
                 'time': self.current_time,
                 'tree': [{'pid': p[1], 'vruntime': round(p[0], 2)} for p in ready_queue],
@@ -966,23 +1088,20 @@ class CFSScheduler:
             }
             red_black_tree_states.append(tree_state)
             
-            # Calculate time slice for this process
             if len(ready_queue) == 0:
                 total_weight = current_process.weight
             else:
                 total_weight = current_process.weight + sum(p[2].weight for p in ready_queue)
             
-            ideal_runtime = (request.time_slice * current_process.weight) / total_weight
-            time_slice = max(int(ideal_runtime), request.min_granularity)
+            ideal_runtime = (request.target_latency * current_process.weight) / total_weight
+            time_slice = max(ideal_runtime, request.min_granularity)
             
-            # Execute process
             if current_process.start_time is None:
                 current_process.start_time = self.current_time
                 current_process.response_time = self.current_time - current_process.arrival_time
             
             execution_time = min(time_slice, current_process.remaining_time)
             
-            # Record execution
             execution_order.append({
                 'process_id': current_process.pid,
                 'start_time': self.current_time,
@@ -1005,15 +1124,12 @@ class CFSScheduler:
                 'remaining_time': current_process.remaining_time
             })
             
-            # Update time and vruntime
             self.current_time += execution_time
             current_process.remaining_time -= execution_time
             
-            # Update vruntime: vruntime += (execution_time * 1024) / weight
-            vruntime_increment = (execution_time * 1024) / current_process.weight
+            vruntime_increment = (execution_time * 1024.0) / current_process.weight
             current_process.vruntime += vruntime_increment
             
-            # Update minimum vruntime
             if ready_queue:
                 self.min_vruntime = min(current_process.vruntime, min(p[0] for p in ready_queue))
             else:
@@ -1027,10 +1143,8 @@ class CFSScheduler:
             })
             
             if current_process.remaining_time > 0:
-                # Process not finished, add back to ready queue
                 heapq.heappush(ready_queue, (current_process.vruntime, current_process.pid, current_process))
             else:
-                # Process completed
                 current_process.completion_time = self.current_time
                 current_process.turnaround_time = current_process.completion_time - current_process.arrival_time
                 current_process.waiting_time = current_process.turnaround_time - current_process.burst_time
@@ -1042,32 +1156,29 @@ class CFSScheduler:
                     'remaining_time': 0
                 })
         
-        # Calculate statistics
-        all_processes = []
+        completed_processes = []
         for entry in execution_order:
             for p in request.processes:
-                if p.pid == entry['process_id']:
-                    all_processes.append(p)
+                if p.pid == entry['process_id'] and p not in completed_processes:
+                    completed_processes.append(p)
                     break
         
-        # Get unique processes for statistics
-        unique_processes = {}
-        for p in request.processes:
-            unique_processes[p.pid] = p
-        
-        completed_processes = list(unique_processes.values())
-        
-        avg_waiting_time = sum(p.waiting_time for p in completed_processes) / len(completed_processes)
-        avg_turnaround_time = sum(p.turnaround_time for p in completed_processes) / len(completed_processes)
-        avg_response_time = sum(p.response_time for p in completed_processes) / len(completed_processes)
+        if completed_processes:
+            avg_waiting_time = sum(p.waiting_time for p in completed_processes) / len(completed_processes)
+            avg_turnaround_time = sum(p.turnaround_time for p in completed_processes) / len(completed_processes)
+            avg_response_time = sum(p.response_time or 0 for p in completed_processes) / len(completed_processes)
+            total_burst_time = sum(p.burst_time for p in completed_processes)
+            cpu_utilization = (total_burst_time / self.current_time) * 100 if self.current_time > 0 else 0
+        else:
+            avg_waiting_time = avg_turnaround_time = avg_response_time = cpu_utilization = 0
         
         statistics = {
             'average_waiting_time': round(avg_waiting_time, 2),
             'average_turnaround_time': round(avg_turnaround_time, 2),
             'average_response_time': round(avg_response_time, 2),
             'total_execution_time': self.current_time,
-            'context_switches': len(execution_order) - 1,
-            'cpu_utilization': round((sum(p.burst_time for p in completed_processes) / self.current_time) * 100, 2)
+            'context_switches': len(execution_order) - 1 if len(execution_order) > 1 else 0,
+            'cpu_utilization': round(cpu_utilization, 2)
         }
         
         return CFSResult(

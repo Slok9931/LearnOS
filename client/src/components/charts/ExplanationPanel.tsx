@@ -19,7 +19,7 @@ import {
   AlertCircle,
   CheckCircle
 } from 'lucide-react'
-import { ScheduleEntry, ProcessResult, SchedulingResult } from '@/types/scheduling'
+import { ScheduleEntry, SchedulingResult } from '@/types/scheduling'
 
 interface ExplanationStep {
   time: number
@@ -442,7 +442,8 @@ function getAlgorithmDescription(algorithm: string): string {
     'sjf': 'Shortest Job First - the process with the smallest burst time is selected next',
     'priority': 'Priority Scheduling - processes are executed based on their priority values',
     'round-robin': 'Round Robin - each process gets a fixed time slice in circular order',
-    'mlfq': 'Multi-Level Feedback Queue - uses multiple priority queues with feedback mechanisms'
+    'mlfq': 'Multi-Level Feedback Queue - uses multiple priority queues with feedback mechanisms',
+    'cfs': 'Completely Fair Scheduler - processes are selected based on virtual runtime for fair CPU distribution'
   }
   return descriptions[algorithm as keyof typeof descriptions] || 'Unknown algorithm'
 }

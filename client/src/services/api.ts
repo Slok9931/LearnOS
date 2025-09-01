@@ -50,6 +50,7 @@ const prepareRequestData = (request: SchedulingRequest) => {
     time_quantum: request.time_quantum,
     preemptive: request.preemptive,
     mlfq_config: request.mlfq_config,
+    cfs_config: request.cfs_config,
   };
 
   // Add Round Robin specific parameters
@@ -73,6 +74,7 @@ const prepareRequestData = (request: SchedulingRequest) => {
 
 // Add proper error handling and data validation
 const validateSchedulingResult = (data: any): SchedulingResult => {
+  
   if (!data.success) {
     return data;
   }
@@ -82,14 +84,18 @@ const validateSchedulingResult = (data: any): SchedulingResult => {
     success: true,
     message: data.message || 'Success',
     data: {
-      processes: data.data?.processes || [],
-      schedule: data.data?.schedule || [],
+      processes: data.data.processes || [],
+      schedule: data.data.schedule || [],
       metrics: {
-        average_waiting_time: data.data?.metrics?.average_waiting_time ?? 0,
-        average_turnaround_time: data.data?.metrics?.average_turnaround_time ?? 0,
-        cpu_utilization: data.data?.metrics?.cpu_utilization ?? 0,
-        throughput: data.data?.metrics?.throughput
-      }
+        average_waiting_time: data.data.metrics?.average_waiting_time ?? 0,
+        average_turnaround_time: data.data.metrics?.average_turnaround_time ?? 0,
+        average_response_time: data.data.metrics?.average_response_time ?? 0,
+        cpu_utilization: data.data.metrics?.cpu_utilization ?? 0,
+        throughput: data.data.metrics?.throughput ?? 0,
+        context_switches: data.data.metrics?.context_switches ?? 0,
+        total_time: data.data.metrics?.total_time ?? 0
+      },
+      algorithm: data.data.algorithm || 'Unknown'
     }
   };
 
@@ -134,7 +140,6 @@ export const schedulingApi = {
   // First Come First Serve
   fcfs: async (data: SchedulingRequest): Promise<SchedulingResult> => {
     const requestData = prepareRequestData(data);
-    console.log('FCFS Request data being sent:', requestData);
     
     const response: AxiosResponse<any> = await apiClient.post(
       API_CONFIG.ENDPOINTS.CPU_SCHEDULING.FCFS,
@@ -147,7 +152,6 @@ export const schedulingApi = {
   // Shortest Job First
   sjf: async (data: SchedulingRequest): Promise<SchedulingResult> => {
     const requestData = prepareRequestData(data);
-    console.log('SJF Request data being sent:', requestData);
     
     const response: AxiosResponse<any> = await apiClient.post(
       API_CONFIG.ENDPOINTS.CPU_SCHEDULING.SJF,
@@ -160,7 +164,6 @@ export const schedulingApi = {
   // Priority Scheduling
   priority: async (data: SchedulingRequest): Promise<SchedulingResult> => {
     const requestData = prepareRequestData(data);
-    console.log('Priority Request data being sent:', requestData);
     
     const response: AxiosResponse<any> = await apiClient.post(
       API_CONFIG.ENDPOINTS.CPU_SCHEDULING.PRIORITY,
@@ -173,7 +176,6 @@ export const schedulingApi = {
   // Round Robin
   roundRobin: async (data: SchedulingRequest): Promise<SchedulingResult> => {
     const requestData = prepareRequestData(data);
-    console.log('Round Robin Request data being sent:', requestData);
     
     // Validate time quantum for Round Robin
     if (!requestData.time_quantum || requestData.time_quantum <= 0) {
@@ -191,7 +193,6 @@ export const schedulingApi = {
   // Multi-Level Feedback Queue
   mlfq: async (data: SchedulingRequest): Promise<SchedulingResult> => {
     const requestData = prepareRequestData(data);
-    console.log('MLFQ Request data being sent:', requestData);
     
     // Ensure MLFQ config exists
     if (!requestData.mlfq_config) {
@@ -216,6 +217,24 @@ export const schedulingApi = {
     const response: AxiosResponse<any> = await apiClient.get('/api/cpu/algorithms');
     return response.data;
   },
+
+  // Complete Fair Scheduler
+  cfs: async (data: SchedulingRequest): Promise<SchedulingResult> => {
+    const requestData = prepareRequestData(data);
+    
+    // Add CFS-specific configuration
+    if (data.cfs_config) {
+      requestData.cfs_config = data.cfs_config;
+    }
+    
+    const response: AxiosResponse<any> = await apiClient.post(
+      API_CONFIG.ENDPOINTS.CPU_SCHEDULING.CFS,
+      requestData
+    );
+    
+    return validateSchedulingResult(response.data);
+  },
+
 };
 
 // Generic API error handler

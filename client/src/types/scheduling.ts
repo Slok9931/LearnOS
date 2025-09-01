@@ -58,28 +58,34 @@ export interface Process {
   weight?: number
 }
 
+export interface MLFQConfig {
+  num_queues: number
+  time_quantums: number[]
+  aging_threshold: number
+  boost_interval: number
+  priority_boost?: boolean
+  feedback_mechanism?: 'time' | 'io' | 'both'
+}
+
+export interface CFSConfig {
+  target_latency: number
+  min_granularity: number
+  nice_levels: boolean
+  load_balancing: boolean
+  sleeper_fairness: boolean
+}
+
 export interface SchedulingRequest {
   processes: Process[]
   time_quantum?: number
   context_switch_cost?: number
   preemptive?: boolean
-  
-  // Round Robin variations
+  mlfq_config?: MLFQConfig
+  cfs_config?: CFSConfig
   rr_variation?: 'standard' | 'weighted' | 'deficit'
   process_weights?: {[key: number]: number}
-  
-  // Priority scheduling options
   priority_type?: 'fixed' | 'dynamic'
   priority_inversion_handling?: boolean
-  
-  mlfq_config?: {
-    num_queues?: number
-    time_quantums?: number[]
-    aging_threshold?: number
-    boost_interval?: number
-    priority_boost?: boolean
-    feedback_mechanism?: 'time' | 'io' | 'both'
-  }
 }
 
 export interface ScheduleEntry {
@@ -134,12 +140,7 @@ export interface MetricsChartData {
   burst_time: number;
 }
 
-export type SchedulingAlgorithm =
-  | 'FCFS'
-  | 'SJF'
-  | 'Priority'
-  | 'RoundRobin'
-  | 'MLFQ'
+export type SchedulingAlgorithm = 'FCFS' | 'SJF' | 'Priority' | 'RoundRobin' | 'MLFQ' | 'CFS'
 
 export interface AlgorithmOption {
   value: SchedulingAlgorithm
@@ -149,13 +150,4 @@ export interface AlgorithmOption {
   requiresPriority?: boolean
   supportsPreemptive?: boolean
   requiresMLFQConfig?: boolean
-}
-
-export interface MLFQConfig {
-  num_queues: number
-  time_quantums: number[]
-  aging_threshold: number
-  boost_interval: number
-  priority_boost?: boolean
-  feedback_mechanism?: 'time' | 'io' | 'both'
 }
