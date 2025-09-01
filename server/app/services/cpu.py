@@ -1,8 +1,8 @@
-import copy
+import heapq
 from typing import List, Dict, Optional
 from app.models.cpu import (
     ScheduleEntry, ProcessResult, SchedulingMetrics, 
-    SchedulingResult, SchedulingRequest, MLFQConfig
+    SchedulingResult, SchedulingRequest, MLFQConfig, CFSRequest, CFSResult
 )
 
 class CPUSchedulingService:
@@ -902,6 +902,180 @@ class CPUSchedulingService:
             throughput=len(results) / total_time if total_time > 0 else 0,
             context_switches=self.context_switches,
             total_time=total_time
+        )
+    
+class CFSScheduler:
+    """Completely Fair Scheduler implementation"""
+    
+    def __init__(self):
+        self.current_time = 0
+        self.total_weight = 0
+        self.min_vruntime = 0.0
+        
+    def schedule(self, request: CFSRequest) -> CFSResult:
+        """Execute CFS scheduling algorithm"""
+        processes = [p.copy() for p in request.processes]
+        
+        # Initialize processes
+        for process in processes:
+            if process.arrival_time == 0:
+                process.vruntime = self.min_vruntime
+            process.remaining_time = process.burst_time
+            process.start_time = None
+            process.completion_time = None
+            process.waiting_time = 0
+            process.turnaround_time = 0
+            process.response_time = None
+        
+        execution_order = []
+        gantt_chart = []
+        timeline = []
+        red_black_tree_states = []
+        
+        # Red-black tree simulation (using min-heap for simplicity)
+        ready_queue = []  # Min-heap based on vruntime
+        self.current_time = 0
+        
+        while processes or ready_queue:
+            # Add arriving processes to ready queue
+            arrived = []
+            for process in processes[:]:
+                if process.arrival_time <= self.current_time:
+                    if process.vruntime == 0:
+                        process.vruntime = max(self.min_vruntime, 0)
+                    heapq.heappush(ready_queue, (process.vruntime, process.pid, process))
+                    arrived.append(process)
+                    processes.remove(process)
+            
+            if not ready_queue:
+                if processes:
+                    # Jump to next arrival
+                    self.current_time = min(p.arrival_time for p in processes)
+                    continue
+                else:
+                    break
+            
+            # Get process with minimum vruntime
+            vruntime, pid, current_process = heapq.heappop(ready_queue)
+            
+            # Record red-black tree state
+            tree_state = {
+                'time': self.current_time,
+                'tree': [{'pid': p[1], 'vruntime': round(p[0], 2)} for p in ready_queue],
+                'running': {'pid': current_process.pid, 'vruntime': round(current_process.vruntime, 2)}
+            }
+            red_black_tree_states.append(tree_state)
+            
+            # Calculate time slice for this process
+            if len(ready_queue) == 0:
+                total_weight = current_process.weight
+            else:
+                total_weight = current_process.weight + sum(p[2].weight for p in ready_queue)
+            
+            ideal_runtime = (request.time_slice * current_process.weight) / total_weight
+            time_slice = max(int(ideal_runtime), request.min_granularity)
+            
+            # Execute process
+            if current_process.start_time is None:
+                current_process.start_time = self.current_time
+                current_process.response_time = self.current_time - current_process.arrival_time
+            
+            execution_time = min(time_slice, current_process.remaining_time)
+            
+            # Record execution
+            execution_order.append({
+                'process_id': current_process.pid,
+                'start_time': self.current_time,
+                'duration': execution_time,
+                'vruntime_before': round(current_process.vruntime, 2),
+                'weight': current_process.weight
+            })
+            
+            gantt_chart.append({
+                'process_id': current_process.pid,
+                'start': self.current_time,
+                'end': self.current_time + execution_time,
+                'duration': execution_time
+            })
+            
+            timeline.append({
+                'time': self.current_time,
+                'event': f"Process P{current_process.pid} starts execution",
+                'vruntime': round(current_process.vruntime, 2),
+                'remaining_time': current_process.remaining_time
+            })
+            
+            # Update time and vruntime
+            self.current_time += execution_time
+            current_process.remaining_time -= execution_time
+            
+            # Update vruntime: vruntime += (execution_time * 1024) / weight
+            vruntime_increment = (execution_time * 1024) / current_process.weight
+            current_process.vruntime += vruntime_increment
+            
+            # Update minimum vruntime
+            if ready_queue:
+                self.min_vruntime = min(current_process.vruntime, min(p[0] for p in ready_queue))
+            else:
+                self.min_vruntime = current_process.vruntime
+            
+            timeline.append({
+                'time': self.current_time,
+                'event': f"Process P{current_process.pid} completed slice",
+                'vruntime': round(current_process.vruntime, 2),
+                'remaining_time': current_process.remaining_time
+            })
+            
+            if current_process.remaining_time > 0:
+                # Process not finished, add back to ready queue
+                heapq.heappush(ready_queue, (current_process.vruntime, current_process.pid, current_process))
+            else:
+                # Process completed
+                current_process.completion_time = self.current_time
+                current_process.turnaround_time = current_process.completion_time - current_process.arrival_time
+                current_process.waiting_time = current_process.turnaround_time - current_process.burst_time
+                
+                timeline.append({
+                    'time': self.current_time,
+                    'event': f"Process P{current_process.pid} completed",
+                    'vruntime': round(current_process.vruntime, 2),
+                    'remaining_time': 0
+                })
+        
+        # Calculate statistics
+        all_processes = []
+        for entry in execution_order:
+            for p in request.processes:
+                if p.pid == entry['process_id']:
+                    all_processes.append(p)
+                    break
+        
+        # Get unique processes for statistics
+        unique_processes = {}
+        for p in request.processes:
+            unique_processes[p.pid] = p
+        
+        completed_processes = list(unique_processes.values())
+        
+        avg_waiting_time = sum(p.waiting_time for p in completed_processes) / len(completed_processes)
+        avg_turnaround_time = sum(p.turnaround_time for p in completed_processes) / len(completed_processes)
+        avg_response_time = sum(p.response_time for p in completed_processes) / len(completed_processes)
+        
+        statistics = {
+            'average_waiting_time': round(avg_waiting_time, 2),
+            'average_turnaround_time': round(avg_turnaround_time, 2),
+            'average_response_time': round(avg_response_time, 2),
+            'total_execution_time': self.current_time,
+            'context_switches': len(execution_order) - 1,
+            'cpu_utilization': round((sum(p.burst_time for p in completed_processes) / self.current_time) * 100, 2)
+        }
+        
+        return CFSResult(
+            execution_order=execution_order,
+            gantt_chart=gantt_chart,
+            statistics=statistics,
+            timeline=timeline,
+            red_black_tree_states=red_black_tree_states
         )
 
 cpu_service = CPUSchedulingService()

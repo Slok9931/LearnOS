@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException
-from app.models.cpu import SchedulingRequest
-from app.models.response import APIResponse
-from app.services.cpu import cpu_service
+from app.models.cpu import SchedulingRequest, CFSRequest
+from app.models.response import APIResponse, SchedulingResponse
+from app.services.cpu import cpu_service, CFSScheduler
 
 router = APIRouter()
 
@@ -44,3 +44,53 @@ async def mlfq(request: SchedulingRequest):
         return APIResponse(success=True, data=result, message="MLFQ scheduling completed successfully")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    
+@router.post("/api/cpu/cfs", response_model=SchedulingResponse)
+async def cfs_scheduling(request: CFSRequest):
+    """
+    Completely Fair Scheduler (CFS) algorithm endpoint
+    
+    CFS is the default process scheduler used by Linux kernel.
+    It maintains a red-black tree of runnable processes sorted by virtual runtime.
+    
+    Features:
+    - Fair allocation of CPU time based on process weights
+    - Nice values affect process priority (-20 to 19)
+    - Virtual runtime tracking for fairness
+    - Red-black tree for O(log n) operations
+    """
+    try:
+        if not request.processes:
+            raise HTTPException(status_code=400, detail="No processes provided")
+        
+        for process in request.processes:
+            if process.burst_time <= 0:
+                raise HTTPException(
+                    status_code=400, 
+                    detail=f"Process {process.pid} has invalid burst time"
+                )
+            if process.arrival_time < 0:
+                raise HTTPException(
+                    status_code=400, 
+                    detail=f"Process {process.pid} has invalid arrival time"
+                )
+            if not (-20 <= process.nice_value <= 19):
+                raise HTTPException(
+                    status_code=400, 
+                    detail=f"Process {process.pid} has invalid nice value. Must be between -20 and 19"
+                )
+        
+        scheduler = CFSScheduler()
+        result = scheduler.schedule(request)
+        
+        return SchedulingResponse(
+            success=True,
+            message="CFS scheduling completed successfully",
+            data=result.dict(),
+            algorithm="CFS"
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")

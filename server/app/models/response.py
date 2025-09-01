@@ -38,6 +38,12 @@ class APIResponse(BaseModel, Generic[T]):
 class SchedulingAPIResponse(APIResponse[SchedulingResult]):
     pass
 
+class SchedulingResponse(BaseModel):
+    success: bool
+    message: str
+    data: Optional[Dict[str, Any]] = None
+    algorithm: Optional[str] = None
+
 class ApiResponse(BaseModel):
     success: bool
     message: str
