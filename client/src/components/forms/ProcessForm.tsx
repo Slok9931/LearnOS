@@ -15,11 +15,11 @@ import {
     Alert,
 } from '@mui/material'
 import { Add, Delete, Clear } from '@mui/icons-material'
-import { Process } from '@/types/scheduling'
+import { BackendProcess, Process } from '@/types/scheduling'
 
 interface ProcessFormProps {
-    processes: Process[]
-    onProcessesChange: (processes: Process[]) => void
+    processes: BackendProcess[]
+    onProcessesChange: (processes: BackendProcess[]) => void
     requiresPriority?: boolean
     title?: string
 }
@@ -30,7 +30,7 @@ export default function ProcessForm({
     requiresPriority = false,
     title = 'Process Configuration'
 }: ProcessFormProps) {
-    const [newProcess, setNewProcess] = useState<Partial<Process>>({
+    const [newProcess, setNewProcess] = useState<Partial<BackendProcess>>({
         pid: processes.length + 1,
         arrival_time: 0,
         burst_time: 1,
@@ -41,7 +41,7 @@ export default function ProcessForm({
         if (!newProcess.arrival_time && newProcess.arrival_time !== 0) return
         if (!newProcess.burst_time || newProcess.burst_time <= 0) return
 
-        const process: Process = {
+        const process: BackendProcess = {
             pid: newProcess.pid || processes.length + 1,
             arrival_time: newProcess.arrival_time || 0,
             burst_time: newProcess.burst_time || 1,
@@ -74,7 +74,7 @@ export default function ProcessForm({
     }
 
     const addSampleData = () => {
-        const sampleProcesses: Process[] = requiresPriority
+        const sampleProcesses: BackendProcess[] = requiresPriority
             ? [
                 { pid: 1, arrival_time: 0, burst_time: 10, priority: 3 },
                 { pid: 2, arrival_time: 0, burst_time: 1, priority: 1 },
@@ -83,11 +83,11 @@ export default function ProcessForm({
                 { pid: 5, arrival_time: 0, burst_time: 5, priority: 2 }
             ]
             : [
-                { pid: 1, arrival_time: 0, burst_time: 10 },
-                { pid: 2, arrival_time: 1, burst_time: 1 },
-                { pid: 3, arrival_time: 2, burst_time: 2 },
-                { pid: 4, arrival_time: 3, burst_time: 1 },
-                { pid: 5, arrival_time: 4, burst_time: 5 }
+                { pid: 1, arrival_time: 0, burst_time: 10, priority: 0 },
+                { pid: 2, arrival_time: 1, burst_time: 1, priority: 0 },
+                { pid: 3, arrival_time: 2, burst_time: 2, priority: 0 },
+                { pid: 4, arrival_time: 3, burst_time: 1, priority: 0 },
+                { pid: 5, arrival_time: 4, burst_time: 5, priority: 0 }
             ]
 
         onProcessesChange(sampleProcesses)

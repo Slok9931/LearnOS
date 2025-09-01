@@ -133,3 +133,29 @@ export interface MetricsChartData {
   turnaround_time: number;
   burst_time: number;
 }
+
+export type SchedulingAlgorithm =
+  | 'FCFS'
+  | 'SJF'
+  | 'Priority'
+  | 'RoundRobin'
+  | 'MLFQ'
+
+export interface AlgorithmOption {
+  value: SchedulingAlgorithm
+  label: string
+  description: string
+  requiresQuantum?: boolean
+  requiresPriority?: boolean
+  supportsPreemptive?: boolean
+  requiresMLFQConfig?: boolean
+}
+
+export interface MLFQConfig {
+  num_queues: number
+  time_quantums: number[]
+  aging_threshold: number
+  boost_interval: number
+  priority_boost?: boolean
+  feedback_mechanism?: 'time' | 'io' | 'both'
+}

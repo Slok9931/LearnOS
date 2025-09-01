@@ -18,7 +18,7 @@ import {
     IconButton,
 } from '@mui/material'
 import { ExpandMore, Add, Delete } from '@mui/icons-material'
-import { SchedulingAlgorithm, AlgorithmOption, MLFQConfig } from '@/types/scheduling'
+import type{ SchedulingAlgorithm, AlgorithmOption, MLFQConfig } from '@/types/scheduling'
 
 interface AlgorithmConfigProps {
     selectedAlgorithm: SchedulingAlgorithm
