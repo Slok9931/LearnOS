@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.endpoints.cpu import router as cpu_router
+from app.endpoints.memory import router as memory_router
 from app.endpoints.terminal import router as terminal_router
 
 app = FastAPI(
@@ -18,6 +19,7 @@ app.add_middleware(
 )
 
 app.include_router(cpu_router)
+app.include_router(memory_router)
 app.include_router(terminal_router)
 
 @app.get("/")
