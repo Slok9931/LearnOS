@@ -31,7 +31,7 @@ class Process(BaseModel):
     pages: Optional[List[int]] = None
 
 class MemoryBlock(BaseModel):
-    id: int
+    id: int = 0
     start_address: int
     size: int
     is_allocated: bool = False
@@ -40,7 +40,8 @@ class MemoryBlock(BaseModel):
     fragment_type: Optional[str] = None
 
 class Segment(BaseModel):
-    id: int
+    id: int = 0
+    segment_id: Optional[int] = None
     process_id: int
     segment_type: str
     size: int
@@ -119,15 +120,10 @@ class AllocationEvent(BaseModel):
     address: Optional[int] = None
     page_number: Optional[int] = None
     frame_number: Optional[int] = None
+    success: Optional[bool] = None
     description: str
-
-class MemoryState(BaseModel):
-    time: float
-    memory_blocks: List[MemoryBlock]
-    allocated_memory: int
-    free_memory: int
-    fragmentation: Dict[str, float]
-    processes: List[Dict[str, Any]]
+    details: Optional[Dict[str, Any]] = None
+    latency: Optional[float] = None
 
 class MemoryMetrics(BaseModel):
     total_memory: int
@@ -147,17 +143,25 @@ class MemoryMetrics(BaseModel):
 
 class MemoryVisualization(BaseModel):
     memory_map: List[Dict[str, Any]]
-    page_table: Optional[List[PageTableEntry]] = None
+    page_table: Optional[List[Dict[str, Any]]] = None
     segment_table: Optional[List[Segment]] = None
     timeline: List[AllocationEvent]
     fragmentation_chart: List[Dict[str, Any]]
+    multi_level_tables: Optional[Dict[str, Any]] = None
+
+class MemoryState(BaseModel):
+    time: float
+    memory_layout: List[Dict[str, Any]]
+    free_memory: int
+    allocated_memory: int
+    fragmentation: Optional[Dict[str, float]] = None
+    processes: Optional[List[Dict[str, Any]]] = None
 
 class MemoryResult(BaseModel):
-    success: bool
     algorithm: str
-    processes: List[Dict[str, Any]]
     metrics: MemoryMetrics
     visualization: MemoryVisualization
-    memory_states: List[MemoryState]
-    final_state: Dict[str, Any]
-    statistics: Dict[str, Any]
+    states: List[MemoryState]
+    explanation: List[str]
+    execution_time: float
+    success: bool

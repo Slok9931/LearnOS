@@ -22,22 +22,12 @@ async def linear_allocation(request: MemoryRequest):
     - Detailed allocation timeline and statistics
     """
     try:
-        if not isinstance(request.config, LinearAllocationConfig):
-            raise HTTPException(status_code=400, detail="Invalid configuration for linear allocation")
-        
-        if not request.processes:
-            raise HTTPException(status_code=400, detail="No processes provided")
-        
+        # Validate processes
         for process in request.processes:
             if process.size <= 0:
                 raise HTTPException(
                     status_code=400, 
                     detail=f"Process {process.name} has invalid size"
-                )
-            if process.arrival_time < 0:
-                raise HTTPException(
-                    status_code=400, 
-                    detail=f"Process {process.name} has invalid arrival time"
                 )
         
         result = memory_service.linear_allocation(request)
@@ -116,15 +106,7 @@ async def paging(request: MemoryRequest):
     - Second Chance algorithm
     """
     try:
-        if not isinstance(request.config, PagingConfig):
-            raise HTTPException(status_code=400, detail="Invalid configuration for paging")
-        
-        if not request.processes:
-            raise HTTPException(status_code=400, detail="No processes provided")
-        
-        if request.config.page_size <= 0:
-            raise HTTPException(status_code=400, detail="Page size must be greater than 0")
-        
+        # Validate processes
         for process in request.processes:
             if process.size <= 0:
                 raise HTTPException(
