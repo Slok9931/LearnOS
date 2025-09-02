@@ -36,7 +36,7 @@ apiClient.interceptors.response.use(
 )
 
 export const memoryApi = {
-  healthCheck: async (): Promise<{ status: string; message?: string }> => {
+  healthCheck: async (): Promise<{ data: { status: string }, message?: string }> => {
     try {
       const response = await apiClient.get('/api/memory/health')
       return response.data
