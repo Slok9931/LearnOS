@@ -77,8 +77,8 @@ const MemoryVisualization: React.FC<MemoryVisualizationProps> = ({ results }) =>
           virtualPage: entry.page_number,
           physicalFrame: entry.frame_number,
           valid: entry.present,
-          dirty: Math.random() > 0.7,
-          referenced: Math.random() > 0.5,
+          dirty: Boolean((entry as any).modify),
+          referenced: Boolean((entry as any).reference),
           processId: entry.process_id,
           processName: `Process ${String.fromCharCode(64 + entry.process_id)}`
         })
@@ -89,8 +89,8 @@ const MemoryVisualization: React.FC<MemoryVisualizationProps> = ({ results }) =>
           virtualAddress: entry.page_number * 4096,
           pageNumber: entry.page_number,
           isValid: entry.present,
-          isDirty: Math.random() > 0.7,
-          isReferenced: Math.random() > 0.5,
+          isDirty: Boolean((entry as any).modify),
+          isReferenced: Boolean((entry as any).reference),
           physicalFrame: entry.present ? entry.frame_number : null,
           processName: `Process ${String.fromCharCode(64 + entry.process_id)}`
         })

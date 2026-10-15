@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 from typing import List, Optional, Dict, Any, Literal, Union
 from enum import Enum
 
@@ -27,8 +27,9 @@ class Process(BaseModel):
     size: int
     arrival_time: float = 0
     priority: int = 0
-    segments: Optional[List[Dict[str, Any]]] = None
-    pages: Optional[List[int]] = None
+    duration: Optional[float] = None  # lifetime after arrival; None = never leaves
+    segments: Optional[List[Dict[str, Any]]] = None  # [{"type": "code", "size": 40}, ...]
+    pages: Optional[List[int]] = None  # explicit page reference string
 
 class MemoryBlock(BaseModel):
     id: int = 0
@@ -48,6 +49,7 @@ class Segment(BaseModel):
     base_address: Optional[int] = None
     limit: Optional[int] = None
     protection: Dict[str, bool] = {"read": True, "write": True, "execute": False}
+    shared_by: List[int] = []
 
 class Page(BaseModel):
     page_number: int
@@ -105,11 +107,29 @@ class MultiLevelPagingConfig(BaseModel):
     replacement_algorithm: ReplacementAlgorithm = ReplacementAlgorithm.LRU
     working_set_size: int = 8
 
+_CONFIG_BY_TYPE = {
+    "linear": LinearAllocationConfig,
+    "segmentation": SegmentationConfig,
+    "paging": PagingConfig,
+    "multi_level_paging": MultiLevelPagingConfig,
+}
+
 class MemoryRequest(BaseModel):
     processes: List[Process]
     config: Union[LinearAllocationConfig, SegmentationConfig, PagingConfig, MultiLevelPagingConfig]
     algorithm_type: Literal["linear", "segmentation", "paging", "multi_level_paging"]
     simulation_time: float = 100.0
+
+    @model_validator(mode="before")
+    @classmethod
+    def _config_matches_algorithm(cls, data):
+        """The four config models overlap heavily (all fields have defaults), so a plain
+        Union can pick the wrong one. Use algorithm_type to choose deterministically."""
+        if isinstance(data, dict) and isinstance(data.get("config"), dict):
+            config_cls = _CONFIG_BY_TYPE.get(data.get("algorithm_type"))
+            if config_cls is not None:
+                data = {**data, "config": config_cls(**data["config"])}
+        return data
 
 class AllocationEvent(BaseModel):
     time: float
@@ -140,6 +160,10 @@ class MemoryMetrics(BaseModel):
     swap_ins: int = 0
     swap_outs: int = 0
     hit_ratio: float = 0.0
+    tlb_hits: int = 0
+    tlb_misses: int = 0
+    tlb_hit_ratio: float = 0.0
+    total_references: int = 0
 
 class MemoryVisualization(BaseModel):
     memory_map: List[Dict[str, Any]]
@@ -147,7 +171,7 @@ class MemoryVisualization(BaseModel):
     segment_table: Optional[List[Segment]] = None
     timeline: List[AllocationEvent]
     fragmentation_chart: List[Dict[str, Any]]
-    multi_level_tables: Optional[Dict[str, Any]] = None
+    multi_level_tables: Optional[Dict[str, Any]] = None  # keyed by str(process_id)
 
 class MemoryState(BaseModel):
     time: float

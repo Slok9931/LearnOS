@@ -19,14 +19,13 @@ export const API_CONFIG = {
       TRAP_TABLE: "/api/terminal/trap-table",
       RESET: "/api/terminal/reset",
     },
-    // Future OS endpoints can be added here
     MEMORY: {
-      // PAGINATION: '/api/memory/pagination',
-      // SEGMENTATION: '/api/memory/segmentation',
-    },
-    DISK: {
-      // FCFS: '/api/disk/fcfs',
-      // SSTF: '/api/disk/sstf',
+      HEALTH: "/api/memory/health",
+      LINEAR: "/api/memory/linear",
+      SEGMENTATION: "/api/memory/segmentation",
+      PAGING: "/api/memory/paging",
+      MULTI_LEVEL_PAGING: "/api/memory/multi-level-paging",
+      ALGORITHMS: "/api/memory/algorithms",
     },
   },
   TIMEOUT: 10000, // 10 seconds

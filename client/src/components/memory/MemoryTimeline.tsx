@@ -56,14 +56,14 @@ const MemoryTimeline: React.FC<MemoryTimelineProps> = ({ results }) => {
           success: event.success,
           page_number: event.page_number,
           frame_number: event.frame_number,
-          latency: event.latency || Math.random() * 100 + 10,
+          latency: event.latency,
           ...event.details
         }
       }))
     }
     
-    // Fallback to generated data if no backend data
-    return generateEnhancedTimeline()
+    // No events were produced by the simulation
+    return []
   }
 
   const events = getTimelineEvents()

@@ -38,6 +38,8 @@ async def api_info():
         "status": "healthy",
         "endpoints": {
             "cpu_scheduling": "/api/cpu/",
+            "memory_management": "/api/memory/",
+            "terminal": "/api/terminal/",
             "health": "/health"
         }
     }

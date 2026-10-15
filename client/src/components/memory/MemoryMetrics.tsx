@@ -41,22 +41,31 @@ const MemoryMetrics: React.FC<MemoryMetricsProps> = ({ results }) => {
     const metrics = results.metrics
 
     // Use actual metrics from backend
+    const references = metrics.total_references ?? ((metrics.page_hits || 0) + (metrics.page_faults || 0))
+    const faultProbability = references > 0 ? (metrics.page_faults || 0) / references : 0
     const virtualMemoryMetrics = {
-        totalVirtualMemory: metrics.total_memory * 4,
-        workingSetSize: Math.floor(metrics.allocated_memory * 0.6),
-        tlbHitRate: metrics.hit_ratio || 87.5,
-        tlbMisses: Math.floor((metrics.page_faults || 23) * 0.3),
-        tlbHits: Math.floor((metrics.page_hits || 1247)),
-        pageFaults: metrics.page_faults || 23,
-        majorPageFaults: Math.floor((metrics.page_faults || 23) * 0.3),
-        minorPageFaults: Math.ceil((metrics.page_faults || 23) * 0.7),
-        pageReads: metrics.swap_ins || 45,
-        pageWrites: metrics.swap_outs || 18,
-        swapUtilization: 23.4,
-        memoryPressure: Math.min(95, metrics.memory_utilization + 10),
-        compressionRatio: 2.1,
-        effectiveAccessTime: Math.round(1 + (100 * (1 - metrics.hit_ratio / 100)) + (10000 * ((metrics.page_faults || 0) / 1000))),
+        totalVirtualMemory: metrics.total_memory,
+        workingSetSize: metrics.allocated_memory,
+        // TLB figures come straight from the simulation (0 when the TLB is disabled)
+        tlbHitRate: metrics.tlb_hit_ratio ?? 0,
+        tlbMisses: metrics.tlb_misses ?? 0,
+        tlbHits: metrics.tlb_hits ?? 0,
+        pageFaults: metrics.page_faults || 0,
+        // every fault in this simulation is served from the backing store
+        majorPageFaults: metrics.page_faults || 0,
+        minorPageFaults: 0,
+        pageReads: metrics.swap_ins || 0,
+        pageWrites: metrics.swap_outs || 0,
+        swapUtilization: 0,
+        memoryPressure: metrics.memory_utilization,
+        compressionRatio: 1,
+        references,
+        // EAT (ns) = (1 - p) * 100 ns memory access + p * 8 ms page-fault service
+        effectiveAccessTime: Math.round((1 - faultProbability) * 100 + faultProbability * 8_000_000),
     }
+
+    const formatAllocTime = (ms: number) =>
+        ms === 0 ? '0ms' : ms < 0.001 ? `${(ms * 1e6).toFixed(0)}ns` : ms < 1 ? `${(ms * 1e3).toFixed(1)}µs` : `${ms.toFixed(1)}ms`
 
     const formatBytes = (bytes: number) => {
         if (bytes >= 1024 * 1024) {
@@ -271,7 +280,7 @@ const MemoryMetrics: React.FC<MemoryMetricsProps> = ({ results }) => {
                         <div className="flex justify-between text-xs">
                             <span className="text-muted-foreground">Fault Rate:</span>
                             <span className="font-mono text-orange-600">
-                                {((virtualMemoryMetrics.pageFaults / (virtualMemoryMetrics.tlbHits + virtualMemoryMetrics.tlbMisses)) * 100).toFixed(2)}%
+                                {(faultProbability * 100).toFixed(2)}%
                             </span>
                         </div>
                     </div>
@@ -404,7 +413,7 @@ const MemoryMetrics: React.FC<MemoryMetricsProps> = ({ results }) => {
                         <div className="grid grid-cols-2 gap-2 text-xs">
                             <div className="flex justify-between">
                                 <span className="text-muted-foreground">Avg Alloc Time:</span>
-                                <span className="font-mono text-foreground">{metrics.average_allocation_time.toFixed(1)}ms</span>
+                                <span className="font-mono text-foreground">{formatAllocTime(metrics.average_allocation_time)}</span>
                             </div>
                             <div className="flex justify-between">
                                 <span className="text-muted-foreground">Thrashing Risk:</span>

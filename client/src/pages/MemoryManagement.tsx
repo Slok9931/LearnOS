@@ -34,6 +34,7 @@ import MemoryMetrics from '@/components/memory/MemoryMetrics'
 import MemoryTimeline from '@/components/memory/MemoryTimeline'
 
 import { memoryApi, handleApiError } from '@/services/memoryApi'
+import { API_CONFIG } from '@/config/api'
 import {
     MemoryProcess,
     MemoryRequest,
@@ -112,7 +113,7 @@ export default function MemoryManagement() {
         } catch (error) {
             console.error('Health check error:', error)
             setServerStatus('unhealthy')
-            setError('Unable to connect to server. Please ensure the server is running on http://localhost:5000')
+            setError(`Unable to connect to server. Please ensure the server is running at ${API_CONFIG.BASE_URL}`)
         }
     }
 
@@ -415,6 +416,20 @@ export default function MemoryManagement() {
                                                             className="h-8 text-sm"
                                                         />
                                                     </div>
+                                                </div>
+                                                <div>
+                                                    <Label htmlFor={`duration-${process.id}`} className="text-xs text-muted-foreground">
+                                                        Duration (blank = stays in memory)
+                                                    </Label>
+                                                    <Input
+                                                        id={`duration-${process.id}`}
+                                                        type="number"
+                                                        min="1"
+                                                        placeholder="∞"
+                                                        value={process.duration ?? ''}
+                                                        onChange={(e) => updateProcess(process.id, 'duration', e.target.value === '' ? undefined : parseFloat(e.target.value))}
+                                                        className="h-8 text-sm"
+                                                    />
                                                 </div>
                                                 <div>
                                                     <Label htmlFor={`priority-${process.id}`} className="text-xs text-muted-foreground">

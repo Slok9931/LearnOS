@@ -3,7 +3,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { 
   Cpu, 
-  HardDrive, 
   MemoryStick, 
   Terminal as TerminalIcon,
   BookOpen,
@@ -43,7 +42,7 @@ const Index = () => {
                     {/* Stats */}
                     <div className="flex items-center justify-center gap-8 pt-8">
                         <div className="text-center">
-                            <div className="text-2xl font-bold text-blue-400">5+</div>
+                            <div className="text-2xl font-bold text-blue-400">15+</div>
                             <div className="text-sm text-gray-400">Algorithms</div>
                         </div>
                         <div className="w-px h-8 bg-gray-700"></div>
@@ -76,7 +75,7 @@ const Index = () => {
                         </p>
                     </div>
 
-                    <div className="grid lg:grid-cols-3 gap-8">
+                    <div className="grid md:grid-cols-2 gap-8 max-w-5xl mx-auto">
                         {/* CPU Scheduling */}
                         <Card className="group hover:shadow-2xl transition-all duration-500 border-gray-700 bg-gradient-to-br from-gray-800 to-gray-900 hover:from-blue-900/20 hover:to-blue-800/10">
                             <CardHeader className="pb-4">
@@ -142,54 +141,18 @@ const Index = () => {
                                     <div className="text-sm font-medium text-gray-300">Key Concepts:</div>
                                     <div className="grid grid-cols-2 gap-2">
                                         <span className="px-3 py-2 bg-green-500/10 text-green-300 rounded-lg text-sm text-center">Paging</span>
-                                        <span className="px-3 py-2 bg-green-500/10 text-green-300 rounded-lg text-sm text-center">Virtual Memory</span>
+                                        <span className="px-3 py-2 bg-green-500/10 text-green-300 rounded-lg text-sm text-center">Segmentation</span>
                                         <span className="px-3 py-2 bg-green-500/10 text-green-300 rounded-lg text-sm text-center">Allocation</span>
-                                        <span className="px-3 py-2 bg-green-500/10 text-green-300 rounded-lg text-sm text-center">Swapping</span>
+                                        <span className="px-3 py-2 bg-green-500/10 text-green-300 rounded-lg text-sm text-center">Page Replacement</span>
                                     </div>
                                 </div>
 
-                                <Button variant="outline" className="w-full border-green-500/30 text-green-400 hover:bg-green-500/10">
-                                    Coming Soon
-                                    <ArrowRight className="ml-2 h-4 w-4" />
-                                </Button>
-                            </CardContent>
-                        </Card>
-
-                        {/* Disk Scheduling */}
-                        <Card className="group hover:shadow-2xl transition-all duration-500 border-gray-700 bg-gradient-to-br from-gray-800 to-gray-900 hover:from-purple-900/20 hover:to-purple-800/10">
-                            <CardHeader className="pb-4">
-                                <div className="flex items-center gap-4">
-                                    <div className="p-3 rounded-xl bg-purple-500/20 text-purple-400 group-hover:bg-purple-500/30 transition-colors">
-                                        <HardDrive className="h-8 w-8" />
-                                    </div>
-                                    <div>
-                                        <CardTitle className="text-xl text-white">Disk Scheduling</CardTitle>
-                                        <CardDescription className="text-gray-400">
-                                            I/O optimization algorithms
-                                        </CardDescription>
-                                    </div>
-                                </div>
-                            </CardHeader>
-                            <CardContent className="space-y-6">
-                                <p className="text-gray-300 leading-relaxed">
-                                    Learn about disk scheduling algorithms that optimize seek time and improve I/O performance. 
-                                    Compare different strategies and understand their trade-offs.
-                                </p>
-                                
-                                <div className="space-y-3">
-                                    <div className="text-sm font-medium text-gray-300">Algorithms:</div>
-                                    <div className="grid grid-cols-2 gap-2">
-                                        <span className="px-3 py-2 bg-purple-500/10 text-purple-300 rounded-lg text-sm text-center">FCFS</span>
-                                        <span className="px-3 py-2 bg-purple-500/10 text-purple-300 rounded-lg text-sm text-center">SSTF</span>
-                                        <span className="px-3 py-2 bg-purple-500/10 text-purple-300 rounded-lg text-sm text-center">SCAN</span>
-                                        <span className="px-3 py-2 bg-purple-500/10 text-purple-300 rounded-lg text-sm text-center">C-SCAN</span>
-                                    </div>
-                                </div>
-
-                                <Button variant="outline" className="w-full border-purple-500/30 text-purple-400 hover:bg-purple-500/10">
-                                    Coming Soon
-                                    <ArrowRight className="ml-2 h-4 w-4" />
-                                </Button>
+                                <Link to="/memory-management">
+                                    <Button className="w-full bg-green-600 hover:bg-green-700 text-white mt-4">
+                                        Explore Memory Management
+                                        <ArrowRight className="ml-2 h-4 w-4" />
+                                    </Button>
+                                </Link>
                             </CardContent>
                         </Card>
                     </div>

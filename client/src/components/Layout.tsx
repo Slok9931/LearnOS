@@ -1,5 +1,5 @@
 import React, { ReactNode } from 'react'
-import { Cpu, HardDrive, MemoryStick, Home, Github, Monitor } from 'lucide-react'
+import { Cpu, MemoryStick, Home, Github, Monitor } from 'lucide-react'
 import { Link, useLocation, Outlet } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 
@@ -8,7 +8,7 @@ const navigationItems = [
         label: 'Home',
         path: '/',
         icon: Home,
-        description: 'Simulate various CPU scheduling algorithms'
+        description: 'Overview and interactive terminal'
     },
     {
         label: 'CPU Scheduling',
@@ -20,15 +20,7 @@ const navigationItems = [
         label: 'Memory Management',
         path: '/memory-management',
         icon: MemoryStick,
-        description: 'Coming Soon: Memory allocation algorithms',
-        disabled: true
-    },
-    {
-        label: 'Disk Scheduling',
-        path: '/disk-scheduling',
-        icon: HardDrive,
-        description: 'Coming Soon: Disk scheduling algorithms',
-        disabled: true
+        description: 'Allocation, segmentation, paging and multi-level paging'
     }
 ]
 

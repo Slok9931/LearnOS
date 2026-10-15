@@ -5,6 +5,27 @@ from app.services.memory import memory_service
 
 router = APIRouter()
 
+
+def _validate_request(request: MemoryRequest, expected_config, label: str) -> None:
+    """Common validation shared by every memory endpoint (raises HTTP 400)."""
+    if not isinstance(request.config, expected_config):
+        raise HTTPException(status_code=400, detail=f"Invalid configuration for {label}")
+    if not request.processes:
+        raise HTTPException(status_code=400, detail="No processes provided")
+    ids = [p.id for p in request.processes]
+    if len(ids) != len(set(ids)):
+        raise HTTPException(status_code=400, detail="Process ids must be unique")
+    for process in request.processes:
+        if process.size <= 0:
+            raise HTTPException(status_code=400, detail=f"Process {process.name} has invalid size")
+        if process.arrival_time < 0:
+            raise HTTPException(status_code=400, detail=f"Process {process.name} has invalid arrival time")
+        if process.duration is not None and process.duration <= 0:
+            raise HTTPException(status_code=400, detail=f"Process {process.name} has invalid duration")
+    total = getattr(request.config, "total_memory", 0)
+    if total <= 0:
+        raise HTTPException(status_code=400, detail="Total memory must be greater than 0")
+
 @router.post("/api/memory/linear")
 async def linear_allocation(request: MemoryRequest):
     """
@@ -22,13 +43,9 @@ async def linear_allocation(request: MemoryRequest):
     - Detailed allocation timeline and statistics
     """
     try:
-        # Validate processes
-        for process in request.processes:
-            if process.size <= 0:
-                raise HTTPException(
-                    status_code=400, 
-                    detail=f"Process {process.name} has invalid size"
-                )
+        _validate_request(request, LinearAllocationConfig, "linear allocation")
+        if request.config.os_reserved < 0:
+            raise HTTPException(status_code=400, detail="OS reserved memory cannot be negative")
         
         result = memory_service.linear_allocation(request)
         
@@ -40,6 +57,8 @@ async def linear_allocation(request: MemoryRequest):
         
     except HTTPException:
         raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
@@ -60,18 +79,9 @@ async def segmentation(request: MemoryRequest):
     - Base addresses and limits
     """
     try:
-        if not isinstance(request.config, SegmentationConfig):
-            raise HTTPException(status_code=400, detail="Invalid configuration for segmentation")
-        
-        if not request.processes:
-            raise HTTPException(status_code=400, detail="No processes provided")
-        
-        for process in request.processes:
-            if process.size <= 0:
-                raise HTTPException(
-                    status_code=400, 
-                    detail=f"Process {process.name} has invalid size"
-                )
+        _validate_request(request, SegmentationConfig, "segmentation")
+        if request.config.max_segments_per_process < 1 or request.config.segment_table_size < 1:
+            raise HTTPException(status_code=400, detail="Segment limits must be at least 1")
         
         result = memory_service.segmentation(request)
         
@@ -83,6 +93,8 @@ async def segmentation(request: MemoryRequest):
         
     except HTTPException:
         raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
@@ -106,13 +118,11 @@ async def paging(request: MemoryRequest):
     - Second Chance algorithm
     """
     try:
-        # Validate processes
-        for process in request.processes:
-            if process.size <= 0:
-                raise HTTPException(
-                    status_code=400, 
-                    detail=f"Process {process.name} has invalid size"
-                )
+        _validate_request(request, PagingConfig, "paging")
+        if request.config.page_size <= 0:
+            raise HTTPException(status_code=400, detail="Page size must be greater than 0")
+        if request.config.total_memory < request.config.page_size:
+            raise HTTPException(status_code=400, detail="Memory must hold at least one page")
         
         result = memory_service.paging(request)
         
@@ -124,6 +134,8 @@ async def paging(request: MemoryRequest):
         
     except HTTPException:
         raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
@@ -146,29 +158,20 @@ async def multi_level_paging(request: MemoryRequest):
     - Working set-based locality optimization
     """
     try:
-        if not isinstance(request.config, MultiLevelPagingConfig):
-            raise HTTPException(status_code=400, detail="Invalid configuration for multi-level paging")
-        
-        if not request.processes:
-            raise HTTPException(status_code=400, detail="No processes provided")
+        _validate_request(request, MultiLevelPagingConfig, "multi-level paging")
         
         # Validate configuration
-        if request.config.levels < 2:
-            raise HTTPException(status_code=400, detail="Multi-level paging requires at least 2 levels")
+        if not 2 <= request.config.levels <= 4:
+            raise HTTPException(status_code=400, detail="Multi-level paging supports 2 to 4 levels")
         
-        if request.config.page_size <= 0:
-            raise HTTPException(status_code=400, detail="Page size must be greater than 0")
+        page_size = request.config.page_size
+        if page_size <= 0 or page_size & (page_size - 1):
+            raise HTTPException(status_code=400, detail="Page size must be a power of two (KB)")
+        if request.config.total_memory < page_size:
+            raise HTTPException(status_code=400, detail="Memory must hold at least one page")
         
         if request.config.working_set_size <= 0:
             raise HTTPException(status_code=400, detail="Working set size must be greater than 0")
-        
-        # Validate processes
-        for process in request.processes:
-            if process.size <= 0:
-                raise HTTPException(
-                    status_code=400, 
-                    detail=f"Process {process.name} has invalid size"
-                )
         
         result = memory_service.multi_level_paging(request)
         
@@ -180,6 +183,8 @@ async def multi_level_paging(request: MemoryRequest):
         
     except HTTPException:
         raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 

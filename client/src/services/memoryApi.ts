@@ -1,14 +1,11 @@
 import axios from 'axios'
 import { MemoryRequest, MemoryApiResponse } from '@/types/memory'
-
-const API_BASE_URL = 'http://localhost:5000'
+import { API_CONFIG, DEFAULT_HEADERS } from '@/config/api'
 
 const apiClient = axios.create({
-  baseURL: API_BASE_URL,
+  baseURL: API_CONFIG.BASE_URL,
   timeout: 30000,
-  headers: {
-    'Content-Type': 'application/json',
-  },
+  headers: DEFAULT_HEADERS,
 })
 
 // Request interceptor
@@ -38,7 +35,7 @@ apiClient.interceptors.response.use(
 export const memoryApi = {
   healthCheck: async (): Promise<{ data: { status: string }, message?: string }> => {
     try {
-      const response = await apiClient.get('/api/memory/health')
+      const response = await apiClient.get(API_CONFIG.ENDPOINTS.MEMORY.HEALTH)
       return response.data
     } catch (error) {
       throw error
@@ -47,7 +44,7 @@ export const memoryApi = {
 
   linearAllocation: async (request: MemoryRequest): Promise<MemoryApiResponse> => {
     try {
-      const response = await apiClient.post('/api/memory/linear', request)
+      const response = await apiClient.post(API_CONFIG.ENDPOINTS.MEMORY.LINEAR, request)
       return response.data
     } catch (error) {
       throw error
@@ -56,7 +53,7 @@ export const memoryApi = {
 
   segmentation: async (request: MemoryRequest): Promise<MemoryApiResponse> => {
     try {
-      const response = await apiClient.post('/api/memory/segmentation', request)
+      const response = await apiClient.post(API_CONFIG.ENDPOINTS.MEMORY.SEGMENTATION, request)
       return response.data
     } catch (error) {
       throw error
@@ -65,7 +62,7 @@ export const memoryApi = {
 
   paging: async (request: MemoryRequest): Promise<MemoryApiResponse> => {
     try {
-      const response = await apiClient.post('/api/memory/paging', request)
+      const response = await apiClient.post(API_CONFIG.ENDPOINTS.MEMORY.PAGING, request)
       return response.data
     } catch (error) {
       throw error
@@ -74,7 +71,7 @@ export const memoryApi = {
 
   multiLevelPaging: async (request: MemoryRequest): Promise<MemoryApiResponse> => {
     try {
-      const response = await apiClient.post('/api/memory/multi-level-paging', request)
+      const response = await apiClient.post(API_CONFIG.ENDPOINTS.MEMORY.MULTI_LEVEL_PAGING, request)
       return response.data
     } catch (error) {
       throw error
@@ -83,7 +80,7 @@ export const memoryApi = {
 
   getAlgorithms: async () => {
     try {
-      const response = await apiClient.get('/api/memory/algorithms')
+      const response = await apiClient.get(API_CONFIG.ENDPOINTS.MEMORY.ALGORITHMS)
       return response.data
     } catch (error) {
       throw error

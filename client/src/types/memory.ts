@@ -4,6 +4,7 @@ export interface MemoryProcess {
   size: number
   arrival_time: number
   priority: number
+  duration?: number // time units after arrival at which the process leaves (omit = stays)
   segments?: Array<{
     type: string
     size: number
@@ -61,6 +62,10 @@ export interface AllocationEvent {
   address?: number
   page_number?: number
   frame_number?: number
+  success?: boolean
+  cache_level?: string
+  latency?: number // nanoseconds
+  details?: Record<string, any>
   description: string
 }
 
@@ -79,6 +84,10 @@ export interface MemoryMetrics {
   swap_ins?: number
   swap_outs?: number
   hit_ratio?: number
+  tlb_hits?: number
+  tlb_misses?: number
+  tlb_hit_ratio?: number
+  total_references?: number
 }
 
 export interface MemoryVisualization {
