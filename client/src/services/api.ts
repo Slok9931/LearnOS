@@ -106,19 +106,28 @@ const validateSchedulingResult = (data: any): SchedulingResult => {
 export const schedulingApi = {
   // Health check
   healthCheck: async (): Promise<{ status: string; message?: string }> => {
-    try {
-      const response: AxiosResponse<any> = await apiClient.get('/health');
-      return { 
-        status: response.data.status === 'healthy' ? 'healthy' : 'unhealthy',
-        message: response.data.message 
-      };
-    } catch (error) {
-      console.error('Health check failed:', error);
-      return { 
-        status: 'unhealthy', 
-        message: 'Server is not responding' 
-      };
+    // A sleeping server (e.g. Render free tier) needs a while to wake up, so retry a few times.
+    const attempts = API_CONFIG.RETRY_ATTEMPTS;
+    for (let attempt = 1; attempt <= attempts; attempt++) {
+      try {
+        // NOTE: not '/health' - some ad/privacy blockers block that exact path (ERR_BLOCKED_BY_CLIENT).
+        // '/api/info' is served by every version of the backend and also reports status.
+        const response: AxiosResponse<any> = await apiClient.get('/api/info');
+        return {
+          status: response.data.status === 'healthy' ? 'healthy' : 'unhealthy',
+          message: response.data.message
+        };
+      } catch (error) {
+        console.error(`Health check failed (attempt ${attempt}/${attempts}):`, error);
+        if (attempt < attempts) {
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        }
+      }
     }
+    return {
+      status: 'unhealthy',
+      message: 'Server is not responding'
+    };
   },
 
   // Test connection

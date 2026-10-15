@@ -28,7 +28,8 @@ export const API_CONFIG = {
       ALGORITHMS: "/api/memory/algorithms",
     },
   },
-  TIMEOUT: 10000, // 10 seconds
+  // Render's free tier sleeps when idle and can take 30-60s to wake up, so be generous.
+  TIMEOUT: 60000, // 60 seconds
   RETRY_ATTEMPTS: 3,
 };
 
